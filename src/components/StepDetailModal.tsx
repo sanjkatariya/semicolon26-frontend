@@ -197,26 +197,31 @@ export default function StepDetailModal({ step, events, onClose }: StepDetailMod
                 Event Log ({stepEvents.length} events)
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
-                {stepEvents.map((event, idx) => (
-                  <div key={idx} className="text-xs border-l-2 border-gray-700 pl-3 py-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500">
-                        {new Date(event.timestamp).toLocaleTimeString()}
-                      </span>
-                      <span className={`px-2 py-0.5 rounded font-semibold ${
-                        event.status === 'started' ? 'bg-yellow-500/20 text-yellow-400' :
-                        event.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                        event.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                        'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {event.status}
-                      </span>
+                {stepEvents.map((event, idx) => {
+                  const eventStatus = 'status' in event ? event.status : undefined;
+                  const eventMessage = 'message' in event ? event.message : undefined;
+
+                  return (
+                    <div key={idx} className="text-xs border-l-2 border-gray-700 pl-3 py-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-gray-500">
+                          {new Date(event.timestamp).toLocaleTimeString()}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded font-semibold ${
+                          eventStatus === 'started' ? 'bg-yellow-500/20 text-yellow-400' :
+                          eventStatus === 'completed' ? 'bg-green-500/20 text-green-400' :
+                          eventStatus === 'failed' ? 'bg-red-500/20 text-red-400' :
+                          'bg-gray-500/20 text-gray-400'
+                        }`}>
+                          {eventStatus}
+                        </span>
+                      </div>
+                      {eventMessage && (
+                        <p className="text-gray-400 mt-1">{eventMessage}</p>
+                      )}
                     </div>
-                    {event.message && (
-                      <p className="text-gray-400 mt-1">{event.message}</p>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

@@ -7,9 +7,28 @@ export interface WorkflowTriggerRequest {
   triggered_by?: string;
 }
 
+export interface WorkflowRepositoryRequest {
+  repo_url: string;
+  branch?: string;
+  commit_sha?: string;
+}
+
+export interface WorkflowBatchTriggerRequest {
+  repo_urls?: string[];
+  repositories?: WorkflowRepositoryRequest[];
+  branch?: string;
+  max_concurrency?: number;
+  triggered_by?: string;
+}
+
 export interface AgentError {
   message: string;
   details?: string;
+}
+
+export interface RepoScopedWorkflowEvent {
+  repo_url?: string;
+  repo_index?: number;
 }
 
 export interface AgentStatusEvent {
@@ -20,6 +39,8 @@ export interface AgentStatusEvent {
   data?: Record<string, any>;
   error?: AgentError;
   message?: string;
+  repo_url?: string;
+  repo_index?: number;
 }
 
 export interface WorkflowCompletedEvent {
@@ -30,6 +51,8 @@ export interface WorkflowCompletedEvent {
   summary?: Record<string, any>;
   data?: Record<string, any>;
   error?: AgentError;
+  repo_url?: string;
+  repo_index?: number;
 }
 
 export interface WorkflowStartedEvent {
@@ -39,6 +62,8 @@ export interface WorkflowStartedEvent {
   data?: Record<string, any>;
   status?: string;
   agent?: string;
+  repo_url?: string;
+  repo_index?: number;
 }
 
 export interface WorkflowFailedEvent {
@@ -49,6 +74,41 @@ export interface WorkflowFailedEvent {
   data?: Record<string, any>;
   status?: string;
   agent?: string;
+  repo_url?: string;
+  repo_index?: number;
+}
+
+export interface BatchStartedEvent {
+  event: 'batch_started';
+  status: 'started';
+  timestamp: string;
+  total_repositories: number;
+  max_concurrency: number;
+}
+
+export interface BatchCompletedResult {
+  repo_url: string;
+  branch?: string;
+  commit_sha?: string;
+  status: 'completed' | 'failed';
+  error?: AgentError;
+  total_vulnerabilities?: number;
+  validation_passed?: boolean;
+  report_path?: string;
+  pr_link?: string;
+}
+
+export interface BatchCompletedEvent {
+  event: 'batch_completed';
+  status: 'completed' | 'failed';
+  timestamp: string;
+  summary?: {
+    total_repositories: number;
+    completed: number;
+    failed: number;
+  };
+  results?: BatchCompletedResult[];
+  error?: AgentError;
 }
 
 export interface GenericWorkflowEvent {
@@ -59,9 +119,18 @@ export interface GenericWorkflowEvent {
   message?: string;
   data?: Record<string, any>;
   error?: AgentError;
+  repo_url?: string;
+  repo_index?: number;
 }
 
-export type WorkflowEvent = AgentStatusEvent | WorkflowCompletedEvent | WorkflowStartedEvent | WorkflowFailedEvent | GenericWorkflowEvent;
+export type WorkflowEvent =
+  | AgentStatusEvent
+  | WorkflowCompletedEvent
+  | WorkflowStartedEvent
+  | WorkflowFailedEvent
+  | BatchStartedEvent
+  | BatchCompletedEvent
+  | GenericWorkflowEvent;
 
 export interface WorkflowStep {
   id: string;

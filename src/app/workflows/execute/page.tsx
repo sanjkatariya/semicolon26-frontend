@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ArrowLeft, Plus, Play, Trash2 } from 'lucide-react';
 import { WorkflowAPIClient } from '@/lib/workflow-api';
-import { WorkflowEvent } from '@/types/workflow-execution';
+import { WorkflowEvent, WorkflowRepositoryRequest } from '@/types/workflow-execution';
 import WorkflowCard from '@/components/WorkflowCard';
 import { rememberAgentResult } from '@/lib/workflow-memory';
 
@@ -23,6 +24,7 @@ interface ExecutionStep {
 interface WorkflowInstance {
   id: string;
   repoUrl: string;
+  repoIndex?: number;
   branch: string;
   triggeredBy: string;
   workflowType: 'repo_remediation' | 'infrastructure_scan';
@@ -33,6 +35,12 @@ interface WorkflowInstance {
   startTime: string;
   eventSource?: EventSource;
   isExpanded: boolean;
+}
+
+interface RepositoryInput {
+  id: string;
+  repo_url: string;
+  branch: string;
 }
 
 type InfrastructureTargetType = 'repo' | 'kubernetes_cluster';
@@ -60,23 +68,80 @@ const infrastructureRepoSteps: ExecutionStep[] = [
   { id: 4, name: 'Report', agent: 'infrastructure_report_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
 ];
 
-// Feature flag for mock data - controlled via .env.local
-// Set NEXT_PUBLIC_ENABLE_MOCK_DATA=true to enable mock/demo data
 const ENABLE_MOCK_DATA = process.env.NEXT_PUBLIC_ENABLE_MOCK_DATA === 'true';
+const DEFAULT_BRANCH = 'main';
+const DEFAULT_MAX_CONCURRENCY = 3;
+const DEFAULT_TRIGGERED_BY = 'ui';
+
+function generateInputId() {
+  return `repo_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function generateWorkflowId(index?: number) {
+  const indexPart = typeof index === 'number' ? `${index}_` : '';
+  return `wf_${Date.now()}_${indexPart}${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createRepositoryInput(repoUrl = '', branch = DEFAULT_BRANCH): RepositoryInput {
+  return {
+    id: generateInputId(),
+    repo_url: repoUrl,
+    branch,
+  };
+}
+
+function cloneSteps(steps: ExecutionStep[]): ExecutionStep[] {
+  return steps.map(step => ({
+    ...step,
+    input: {},
+    output: {},
+  }));
+}
+
+function getScopedRepoIndex(event: WorkflowEvent, targets: WorkflowRepositoryRequest[]) {
+  if ('repo_index' in event && typeof event.repo_index === 'number') {
+    return event.repo_index;
+  }
+
+  if ('repo_url' in event && typeof event.repo_url === 'string') {
+    const matchedIndex = targets.findIndex(target => target.repo_url === event.repo_url);
+    return matchedIndex >= 0 ? matchedIndex : undefined;
+  }
+
+  return undefined;
+}
+
+function getBatchResults(event: WorkflowEvent) {
+  return 'results' in event && Array.isArray(event.results) ? event.results : [];
+}
+
+function getBatchSummary(event: WorkflowEvent) {
+  return 'summary' in event && event.summary ? event.summary : undefined;
+}
 
 export default function ExecuteWorkflowPage() {
   const router = useRouter();
+  const batchStreamRef = useRef<EventSource | null>(null);
   const [workflows, setWorkflows] = useState<WorkflowInstance[]>([]);
+  const [repositoryInputs, setRepositoryInputs] = useState<RepositoryInput[]>([
+    createRepositoryInput(
+      ENABLE_MOCK_DATA ? 'https://github.com/kim815/vulnerable-repo' : '',
+      DEFAULT_BRANCH
+    ),
+  ]);
+  const [isTriggering, setIsTriggering] = useState(false);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [infrastructureMock, setInfrastructureMock] = useState<any>(null);
   const [formData, setFormData] = useState({
     workflow_type: 'repo_remediation' as 'repo_remediation' | 'infrastructure_scan',
     repo_url: ENABLE_MOCK_DATA ? 'https://github.com/kim815/vulnerable-repo' : '',
-    branch: ENABLE_MOCK_DATA ? 'main' : '',
-    triggered_by: 'ui',
+    branch: ENABLE_MOCK_DATA ? DEFAULT_BRANCH : '',
+    triggered_by: DEFAULT_TRIGGERED_BY,
     infrastructure_target: 'kubernetes_cluster' as InfrastructureTargetType,
     iac_repo_url: 'https://github.com/company/infrastructure',
-    iac_branch: 'main',
+    iac_branch: DEFAULT_BRANCH,
     iac_path: 'k8s/overlays/prod',
     cluster_name: 'prod-eks-us-east-1',
     kubeconfig_context: 'prod-admin',
@@ -87,7 +152,7 @@ export default function ExecuteWorkflowPage() {
     scan_rbac: true,
     scan_network_policies: true,
     scan_secrets: false,
-    timeout: '600'
+    timeout: '600',
   });
 
   useEffect(() => {
@@ -97,26 +162,58 @@ export default function ExecuteWorkflowPage() {
       .catch(error => console.error('Error loading infrastructure scan mock data:', error));
   }, []);
 
-  // Cleanup on unmount ONLY (empty dependency array)
   useEffect(() => {
     return () => {
-      // This only runs when component unmounts
-      console.log('[ExecuteWorkflow] Component unmounting, closing all connections');
-      // We need to access the latest workflows state
+      batchStreamRef.current?.close();
       setWorkflows(currentWorkflows => {
-        currentWorkflows.forEach(wf => {
-          if (wf.eventSource) {
-            console.log(`[ExecuteWorkflow] Closing connection for workflow ${wf.id}`);
-            wf.eventSource.close();
-          }
-        });
+        currentWorkflows.forEach(wf => wf.eventSource?.close());
         return currentWorkflows;
       });
     };
-  }, []); // Empty array = only run on mount/unmount
+  }, []);
 
-  const generateWorkflowId = () => {
-    return `wf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const updateRepositoryInput = (id: string, changes: Partial<Omit<RepositoryInput, 'id'>>) => {
+    setRepositoryInputs(prev =>
+      prev.map(input => (input.id === id ? { ...input, ...changes } : input))
+    );
+  };
+
+  const addRepositoryInput = () => {
+    setRepositoryInputs(prev => [...prev, createRepositoryInput()]);
+  };
+
+  const removeRepositoryInput = (id: string) => {
+    setRepositoryInputs(prev => {
+      if (prev.length === 1) {
+        return [createRepositoryInput()];
+      }
+
+      return prev.filter(input => input.id !== id);
+    });
+  };
+
+  const buildRepositoryTargets = (): WorkflowRepositoryRequest[] | null => {
+    const emptyIndex = repositoryInputs.findIndex(input => !input.repo_url.trim());
+    if (emptyIndex !== -1) {
+      alert(`Repository ${emptyIndex + 1} needs a URL before triggering the batch.`);
+      return null;
+    }
+
+    const targets = repositoryInputs.map(input => ({
+      repo_url: input.repo_url.trim(),
+      branch: input.branch.trim() || DEFAULT_BRANCH,
+      commit_sha: 'HEAD',
+    }));
+    const duplicateUrl = targets.find((target, index) =>
+      targets.findIndex(candidate => candidate.repo_url === target.repo_url) !== index
+    );
+
+    if (duplicateUrl) {
+      alert(`Remove the duplicate repository URL before triggering: ${duplicateUrl.repo_url}`);
+      return null;
+    }
+
+    return targets;
   };
 
   const getInfrastructureTargetLabel = () => {
@@ -162,56 +259,115 @@ export default function ExecuteWorkflowPage() {
     };
   };
 
-  const addNewWorkflow = () => {
-    if (formData.workflow_type === 'repo_remediation' && !formData.repo_url.trim()) {
-      alert('Please enter a repository URL');
-      return;
+  const rememberRepoEvent = (
+    workflowId: string,
+    target: WorkflowRepositoryRequest,
+    event: WorkflowEvent
+  ) => {
+    if (event.event === 'agent_status' && event.agent && (event.status === 'completed' || event.status === 'failed')) {
+      try {
+        const stepName = initialSteps.find(step => step.agent === event.agent)?.name || event.agent;
+        rememberAgentResult({
+          workflowId,
+          agent: event.agent,
+          stepName,
+          status: event.status,
+          timestamp: event.timestamp,
+          repoUrl: target.repo_url,
+          branch: target.branch || DEFAULT_BRANCH,
+          output: event.status === 'failed'
+            ? { error: event.error?.message || 'Unknown error' }
+            : event.data || {},
+        });
+      } catch (memoryError) {
+        console.warn(`[${workflowId}] Failed to save temporary agent result`, memoryError);
+      }
     }
 
-    if (formData.workflow_type === 'infrastructure_scan') {
-      if (formData.infrastructure_target === 'repo' && !formData.iac_repo_url.trim()) {
-        alert('Please enter an infrastructure repository URL');
-        return;
+    if (event.event === 'workflow_completed') {
+      try {
+        const workflowSummary = 'summary' in event ? event.summary : undefined;
+        const workflowStatus = event.status === 'failed' ? 'failed' : 'completed';
+        rememberAgentResult({
+          workflowId,
+          agent: 'workflow',
+          stepName: 'Workflow Summary',
+          status: workflowStatus,
+          timestamp: event.timestamp,
+          repoUrl: target.repo_url,
+          branch: target.branch || DEFAULT_BRANCH,
+          output: workflowSummary || ('data' in event ? event.data : undefined) || {},
+        });
+      } catch (memoryError) {
+        console.warn(`[${workflowId}] Failed to save temporary workflow summary`, memoryError);
+      }
+    }
+  };
+
+  const applyRepoEvent = (
+    workflowId: string,
+    target: WorkflowRepositoryRequest,
+    event: WorkflowEvent
+  ) => {
+    rememberRepoEvent(workflowId, target, event);
+
+    setWorkflows(prev => prev.map(wf => {
+      if (wf.id !== workflowId) return wf;
+
+      const updatedEvents = [...wf.events, event];
+      const updatedSteps = [...wf.steps];
+      let updatedStatus = wf.status;
+      let updatedCurrentStep = wf.currentStep;
+
+      if (event.event === 'agent_status' && event.agent) {
+        const agentIndex = updatedSteps.findIndex(step => step.agent === event.agent);
+        if (agentIndex !== -1) {
+          if (event.status === 'started') {
+            updatedStatus = 'running';
+            updatedCurrentStep = agentIndex;
+            updatedSteps[agentIndex] = {
+              ...updatedSteps[agentIndex],
+              status: 'running',
+              startTime: event.timestamp,
+              progress: 50,
+              input: { repository_url: target.repo_url, branch: target.branch || DEFAULT_BRANCH },
+            };
+          } else if (event.status === 'completed') {
+            const startTime = updatedSteps[agentIndex].startTime;
+            const duration = startTime
+              ? Math.round((new Date(event.timestamp).getTime() - new Date(startTime).getTime()) / 1000)
+              : 0;
+            updatedSteps[agentIndex] = {
+              ...updatedSteps[agentIndex],
+              status: 'completed',
+              endTime: event.timestamp,
+              progress: 100,
+              duration,
+              output: event.data || {},
+            };
+          } else if (event.status === 'failed') {
+            updatedSteps[agentIndex] = {
+              ...updatedSteps[agentIndex],
+              status: 'failed',
+              endTime: event.timestamp,
+              progress: 100,
+              output: { error: event.error?.message || 'Unknown error' },
+            };
+            updatedStatus = 'failed';
+          }
+        }
+      } else if (event.event === 'workflow_completed') {
+        updatedStatus = event.status === 'failed' ? 'failed' : 'completed';
       }
 
-      if (formData.infrastructure_target === 'kubernetes_cluster' && (!formData.cluster_name.trim() || !formData.kubeconfig_context.trim())) {
-        alert('Please enter Kubernetes cluster name and kubeconfig context');
-        return;
-      }
-    }
-
-    const workflowId = generateWorkflowId();
-    const isInfrastructureScan = formData.workflow_type === 'infrastructure_scan';
-    const infrastructureInput = buildInfrastructureInput();
-    const newWorkflow: WorkflowInstance = {
-      id: workflowId,
-      repoUrl: isInfrastructureScan ? getInfrastructureTargetLabel() : formData.repo_url,
-      branch: isInfrastructureScan ? getInfrastructureBranchLabel() : formData.branch || 'main',
-      triggeredBy: formData.triggered_by || 'ui',
-      workflowType: formData.workflow_type,
-      status: 'pending',
-      currentStep: 0,
-      steps: JSON.parse(JSON.stringify(
-        isInfrastructureScan
-          ? formData.infrastructure_target === 'repo'
-            ? infrastructureRepoSteps
-            : infrastructureSteps
-          : initialSteps
-      )),
-      events: [],
-      startTime: new Date().toISOString(),
-      isExpanded: true
-    };
-
-    setWorkflows(prev => [...prev, newWorkflow]);
-    setShowAddForm(false);
-    
-    // Start workflow execution
-    if (isInfrastructureScan) {
-      void executeInfrastructureWorkflow(workflowId, newWorkflow, formData.infrastructure_target, infrastructureInput);
-    } else {
-      executeWorkflow(workflowId, newWorkflow);
-    }
+      return {
+        ...wf,
+        events: updatedEvents,
+        steps: updatedSteps,
+        status: updatedStatus,
+        currentStep: updatedCurrentStep,
+      };
+    }));
   };
 
   const executeInfrastructureWorkflow = async (
@@ -342,136 +498,40 @@ export default function ExecuteWorkflowPage() {
   };
 
   const executeWorkflow = async (workflowId: string, workflow: WorkflowInstance) => {
-    // Update status to running
-    setWorkflows(prev => prev.map(wf => 
+    const target = {
+      repo_url: workflow.repoUrl,
+      branch: workflow.branch || DEFAULT_BRANCH,
+    };
+
+    setWorkflows(prev => prev.map(wf =>
       wf.id === workflowId ? { ...wf, status: 'running' } : wf
     ));
 
     try {
-      console.log(`[${workflowId}] Starting workflow execution...`);
-      
       const eventSource = WorkflowAPIClient.triggerWorkflow(
         {
           repo_url: workflow.repoUrl,
           branch: workflow.branch,
-          triggered_by: workflow.triggeredBy
+          triggered_by: workflow.triggeredBy,
         },
         (event: WorkflowEvent) => {
           console.log(`[${workflowId}] Event received:`, event);
-
-          if (event.event === 'agent_status' && event.agent && (event.status === 'completed' || event.status === 'failed')) {
-            try {
-              const stepName = initialSteps.find(step => step.agent === event.agent)?.name || event.agent;
-              rememberAgentResult({
-                workflowId,
-                agent: event.agent,
-                stepName,
-                status: event.status,
-                timestamp: event.timestamp,
-                repoUrl: workflow.repoUrl,
-                branch: workflow.branch,
-                output: event.status === 'failed'
-                  ? { error: event.error?.message || 'Unknown error' }
-                  : event.data || {},
-              });
-            } catch (memoryError) {
-              console.warn(`[${workflowId}] Failed to save temporary agent result`, memoryError);
-            }
-          }
-          
-          // Add event to workflow
-          setWorkflows(prev => prev.map(wf => {
-            if (wf.id !== workflowId) return wf;
-            
-            const updatedEvents = [...wf.events, event];
-            let updatedSteps = [...wf.steps];
-            let updatedStatus = wf.status;
-            let updatedCurrentStep = wf.currentStep;
-
-            // Update steps based on event
-            if (event.event === 'agent_status' && 'agent' in event && event.agent) {
-              const agentIndex = updatedSteps.findIndex(s => s.agent === event.agent);
-              if (agentIndex !== -1) {
-                if (event.status === 'started') {
-                  updatedCurrentStep = agentIndex;
-                  updatedSteps[agentIndex] = {
-                    ...updatedSteps[agentIndex],
-                    status: 'running',
-                    startTime: event.timestamp,
-                    progress: 50,
-                    input: { repository_url: workflow.repoUrl, branch: workflow.branch }
-                  };
-                } else if (event.status === 'completed') {
-                  const startTime = updatedSteps[agentIndex].startTime;
-                  const duration = startTime
-                    ? Math.round((new Date(event.timestamp).getTime() - new Date(startTime).getTime()) / 1000)
-                    : 0;
-                  updatedSteps[agentIndex] = {
-                    ...updatedSteps[agentIndex],
-                    status: 'completed',
-                    endTime: event.timestamp,
-                    progress: 100,
-                    duration,
-                    output: event.data || {}
-                  };
-                } else if (event.status === 'failed') {
-                  updatedSteps[agentIndex] = {
-                    ...updatedSteps[agentIndex],
-                    status: 'failed',
-                    endTime: event.timestamp,
-                    progress: 100,
-                    output: { error: event.error?.message || 'Unknown error' }
-                  };
-                  updatedStatus = 'failed';
-                }
-              }
-            } else if (event.event === 'workflow_completed') {
-              const workflowStatus = event.status === 'failed' ? 'failed' : 'completed';
-              const workflowSummary = 'summary' in event ? event.summary : undefined;
-              updatedStatus = workflowStatus;
-              try {
-                rememberAgentResult({
-                  workflowId,
-                  agent: 'workflow',
-                  stepName: 'Workflow Summary',
-                  status: workflowStatus,
-                  timestamp: event.timestamp,
-                  repoUrl: workflow.repoUrl,
-                  branch: workflow.branch,
-                  output: workflowSummary || event.data || {},
-                });
-              } catch (memoryError) {
-                console.warn(`[${workflowId}] Failed to save temporary workflow summary`, memoryError);
-              }
-            }
-
-            return {
-              ...wf,
-              events: updatedEvents,
-              steps: updatedSteps,
-              status: updatedStatus,
-              currentStep: updatedCurrentStep
-            };
-          }));
+          applyRepoEvent(workflowId, target, event);
         },
-        // Error callback
         (error: Error) => {
           console.error(`[${workflowId}] Stream error:`, error);
           setWorkflows(prev => prev.map(wf =>
             wf.id === workflowId ? { ...wf, status: 'failed' } : wf
           ));
         },
-        // Complete callback
         () => {
           console.log(`[${workflowId}] Stream completed`);
         }
       );
 
-      // Store event source for cleanup
       setWorkflows(prev => prev.map(wf =>
         wf.id === workflowId ? { ...wf, eventSource } : wf
       ));
-
     } catch (error) {
       console.error(`[${workflowId}] Execution error:`, error);
       setWorkflows(prev => prev.map(wf =>
@@ -480,58 +540,276 @@ export default function ExecuteWorkflowPage() {
     }
   };
 
+  const addNewWorkflow = () => {
+    if (formData.workflow_type === 'repo_remediation' && !formData.repo_url.trim()) {
+      alert('Please enter a repository URL');
+      return;
+    }
+
+    if (formData.workflow_type === 'infrastructure_scan') {
+      if (formData.infrastructure_target === 'repo' && !formData.iac_repo_url.trim()) {
+        alert('Please enter an infrastructure repository URL');
+        return;
+      }
+
+      if (formData.infrastructure_target === 'kubernetes_cluster' && (!formData.cluster_name.trim() || !formData.kubeconfig_context.trim())) {
+        alert('Please enter Kubernetes cluster name and kubeconfig context');
+        return;
+      }
+    }
+
+    const workflowId = generateWorkflowId();
+    const isInfrastructureScan = formData.workflow_type === 'infrastructure_scan';
+    const infrastructureInput = buildInfrastructureInput();
+    const newWorkflow: WorkflowInstance = {
+      id: workflowId,
+      repoUrl: isInfrastructureScan ? getInfrastructureTargetLabel() : formData.repo_url.trim(),
+      branch: isInfrastructureScan ? getInfrastructureBranchLabel() : formData.branch.trim() || DEFAULT_BRANCH,
+      triggeredBy: formData.triggered_by || DEFAULT_TRIGGERED_BY,
+      workflowType: formData.workflow_type,
+      status: 'pending',
+      currentStep: 0,
+      steps: cloneSteps(
+        isInfrastructureScan
+          ? formData.infrastructure_target === 'repo'
+            ? infrastructureRepoSteps
+            : infrastructureSteps
+          : initialSteps
+      ),
+      events: [],
+      startTime: new Date().toISOString(),
+      isExpanded: true,
+    };
+
+    setWorkflows(prev => [newWorkflow, ...prev]);
+    setShowAddForm(false);
+
+    if (isInfrastructureScan) {
+      void executeInfrastructureWorkflow(workflowId, newWorkflow, formData.infrastructure_target, infrastructureInput);
+    } else {
+      void executeWorkflow(workflowId, newWorkflow);
+    }
+  };
+
+  const applyBatchCompleted = (
+    event: WorkflowEvent,
+    workflowIdByIndex: Map<number, string>,
+    repoIndexByWorkflowId: Map<string, number>,
+    targets: WorkflowRepositoryRequest[]
+  ) => {
+    const results = getBatchResults(event);
+    const summary = getBatchSummary(event);
+    const batchFailed = 'status' in event && event.status === 'failed';
+    const batchErrorMessage = 'error' in event ? event.error?.message : undefined;
+
+    if (batchErrorMessage) {
+      setBatchError(batchErrorMessage);
+    }
+
+    if (summary && 'completed' in summary && 'failed' in summary) {
+      setBatchMessage(
+        `Batch finished: ${summary.completed} completed, ${summary.failed} failed.`
+      );
+    } else {
+      setBatchMessage('Batch finished.');
+    }
+
+    setIsTriggering(false);
+
+    setWorkflows(prev => prev.map(wf => {
+      const repoIndex = repoIndexByWorkflowId.get(wf.id);
+      if (repoIndex === undefined) return wf;
+
+      const target = targets[repoIndex];
+      const result =
+        results.find(item => item.repo_url === target.repo_url) ||
+        results[repoIndex];
+
+      if (!result) {
+        if (batchFailed && (wf.status === 'pending' || wf.status === 'running')) {
+          return {
+            ...wf,
+            status: 'failed',
+            events: [...wf.events, event],
+          };
+        }
+
+        return wf;
+      }
+
+      const nextStatus = result.status === 'completed' ? 'completed' : 'failed';
+      if (wf.status === 'completed' || wf.status === 'failed') {
+        return wf;
+      }
+
+      return {
+        ...wf,
+        status: nextStatus,
+        events: [...wf.events, event],
+      };
+    }));
+
+    results.forEach((result, index) => {
+      const workflowId = workflowIdByIndex.get(index);
+      if (!workflowId) return;
+
+      try {
+        rememberAgentResult({
+          workflowId,
+          agent: 'batch',
+          stepName: 'Batch Summary',
+          status: result.status,
+          timestamp: event.timestamp,
+          repoUrl: result.repo_url,
+          branch: result.branch || targets[index]?.branch || DEFAULT_BRANCH,
+          output: result,
+        });
+      } catch (memoryError) {
+        console.warn(`[${workflowId}] Failed to save temporary batch summary`, memoryError);
+      }
+    });
+  };
+
+  const triggerBatchWorkflow = () => {
+    if (isTriggering) return;
+
+    const targets = buildRepositoryTargets();
+    if (!targets) return;
+
+    const workflowIdByIndex = new Map<number, string>();
+    const repoIndexByWorkflowId = new Map<string, number>();
+    const startTime = new Date().toISOString();
+    const nextWorkflows: WorkflowInstance[] = targets.map((target, index) => {
+      const id = generateWorkflowId(index);
+      workflowIdByIndex.set(index, id);
+      repoIndexByWorkflowId.set(id, index);
+
+      return {
+        id,
+        repoUrl: target.repo_url,
+        repoIndex: index,
+        branch: target.branch || DEFAULT_BRANCH,
+        triggeredBy: DEFAULT_TRIGGERED_BY,
+        workflowType: 'repo_remediation',
+        status: 'pending',
+        currentStep: 0,
+        steps: cloneSteps(initialSteps),
+        events: [],
+        startTime,
+        isExpanded: index === 0,
+      };
+    });
+
+    setWorkflows(prev => [...nextWorkflows, ...prev]);
+    setBatchError(null);
+    setBatchMessage(`Batch queued for ${targets.length} ${targets.length === 1 ? 'repository' : 'repositories'}.`);
+    setIsTriggering(true);
+
+    batchStreamRef.current?.close();
+    batchStreamRef.current = WorkflowAPIClient.triggerBatchWorkflow(
+      {
+        repositories: targets,
+        max_concurrency: DEFAULT_MAX_CONCURRENCY,
+        triggered_by: DEFAULT_TRIGGERED_BY,
+      },
+      (event: WorkflowEvent) => {
+        console.log('[ExecuteWorkflow] Batch event received:', event);
+
+        if (event.event === 'batch_started') {
+          const totalRepositories =
+            'total_repositories' in event ? event.total_repositories : targets.length;
+          setBatchMessage(
+            `Batch started for ${totalRepositories} repositories.`
+          );
+          return;
+        }
+
+        if (event.event === 'batch_completed') {
+          applyBatchCompleted(event, workflowIdByIndex, repoIndexByWorkflowId, targets);
+          return;
+        }
+
+        const repoIndex = getScopedRepoIndex(event, targets);
+        if (repoIndex === undefined) {
+          return;
+        }
+
+        const workflowId = workflowIdByIndex.get(repoIndex);
+        const target = targets[repoIndex];
+        if (!workflowId || !target) {
+          return;
+        }
+
+        applyRepoEvent(workflowId, target, event);
+      },
+      (error: Error) => {
+        console.error('[ExecuteWorkflow] Batch stream error:', error);
+        setBatchError(error.message);
+        setBatchMessage(null);
+        setIsTriggering(false);
+        setWorkflows(prev => prev.map(wf =>
+          repoIndexByWorkflowId.has(wf.id) ? { ...wf, status: 'failed' } : wf
+        ));
+      },
+      () => {
+        console.log('[ExecuteWorkflow] Batch stream completed');
+        setIsTriggering(false);
+      }
+    );
+  };
+
   const removeWorkflow = (workflowId: string) => {
     const workflow = workflows.find(wf => wf.id === workflowId);
-    if (workflow?.eventSource) {
-      workflow.eventSource.close();
-    }
+    workflow?.eventSource?.close();
     setWorkflows(prev => prev.filter(wf => wf.id !== workflowId));
   };
 
   const toggleWorkflowExpand = (workflowId: string) => {
-    setWorkflows(prev => prev.map(wf => 
+    setWorkflows(prev => prev.map(wf =>
       wf.id === workflowId ? { ...wf, isExpanded: !wf.isExpanded } : wf
     ));
   };
 
+  const runningCount = workflows.filter(w => w.status === 'running').length;
+  const completedCount = workflows.filter(w => w.status === 'completed').length;
+  const failedCount = workflows.filter(w => w.status === 'failed').length;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900">
-      {/* Header */}
-      <div className="border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900/20 to-gray-900 text-white">
+      <div className="sticky top-0 z-40 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm">
+        <div className="mx-auto max-w-7xl px-6 py-4">
           <button
+            type="button"
             onClick={() => router.push('/workflows')}
-            className="mb-4 px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-sm"
+            className="mb-4 inline-flex items-center gap-2 rounded-lg bg-gray-800 px-4 py-2 text-sm transition-colors hover:bg-gray-700"
           >
-            ← Back to Workflows
+            <ArrowLeft className="h-4 w-4" />
+            Back to Workflows
           </button>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                🚀
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold">Execute Workflows</h1>
-                <p className="text-sm text-gray-400">Run multiple workflows simultaneously</p>
-              </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Execute Workflows</h1>
+              <p className="text-sm text-gray-400">Run single workflows, infrastructure scans, or batch repository remediation</p>
             </div>
             <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold transition-all flex items-center gap-2"
+              type="button"
+              onClick={() => setShowAddForm(prev => !prev)}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-5 py-3 font-semibold transition-all hover:from-purple-600 hover:to-pink-600"
             >
-              <span className="text-xl">+</span> Add Workflow
+              <Plus className="h-5 w-5" />
+              Add Workflow
             </button>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Add Workflow Form */}
+      <div className="mx-auto max-w-7xl px-6 py-8">
         {showAddForm && (
-          <div className="mb-6 bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-6">
-            <h2 className="text-xl font-semibold mb-4">New Workflow</h2>
+          <section className="mb-6 rounded-lg border border-gray-700 bg-gray-800/50 p-6 backdrop-blur-sm">
+            <h2 className="mb-4 text-xl font-semibold">New Workflow</h2>
             <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
               <button
+                type="button"
                 onClick={() => setFormData({ ...formData, workflow_type: 'repo_remediation' })}
                 className={`rounded-lg border p-4 text-left transition-all ${
                   formData.workflow_type === 'repo_remediation'
@@ -540,9 +818,10 @@ export default function ExecuteWorkflowPage() {
                 }`}
               >
                 <div className="font-semibold">Repository remediation</div>
-                <div className="mt-1 text-xs text-gray-400">Existing repo scan, issues, remediation, validation, and PR workflow.</div>
+                <div className="mt-1 text-xs text-gray-400">Run one repository through scan, issues, remediation, validation, and PR creation.</div>
               </button>
               <button
+                type="button"
                 onClick={() => setFormData({ ...formData, workflow_type: 'infrastructure_scan' })}
                 className={`rounded-lg border p-4 text-left transition-all ${
                   formData.workflow_type === 'infrastructure_scan'
@@ -551,45 +830,45 @@ export default function ExecuteWorkflowPage() {
                 }`}
               >
                 <div className="font-semibold">Infrastructure scan</div>
-                <div className="mt-1 text-xs text-gray-400">Mock IaC or Kubernetes cluster scan with 4 focused agents.</div>
+                <div className="mt-1 text-xs text-gray-400">Run the IaC or Kubernetes scan flow from main.</div>
               </button>
             </div>
 
             {formData.workflow_type === 'repo_remediation' ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
                     Repository URL *
                   </label>
                   <input
                     type="text"
                     value={formData.repo_url}
                     onChange={(e) => setFormData({ ...formData, repo_url: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
                     placeholder="https://github.com/user/repo"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
                     Branch
                   </label>
                   <input
                     type="text"
                     value={formData.branch}
                     onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
                     placeholder="main"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
                     Triggered By
                   </label>
                   <input
                     type="text"
                     value={formData.triggered_by}
                     onChange={(e) => setFormData({ ...formData, triggered_by: e.target.value })}
-                    className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
                     placeholder="ui"
                   />
                 </div>
@@ -598,6 +877,7 @@ export default function ExecuteWorkflowPage() {
               <div className="mb-4 space-y-5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <button
+                    type="button"
                     onClick={() => setFormData({ ...formData, infrastructure_target: 'repo' })}
                     className={`rounded-lg border p-3 text-left transition-all ${
                       formData.infrastructure_target === 'repo'
@@ -609,6 +889,7 @@ export default function ExecuteWorkflowPage() {
                     <div className="mt-1 text-xs text-gray-400">Scan Kubernetes manifests, Helm charts, Terraform, or policy files from a repo.</div>
                   </button>
                   <button
+                    type="button"
                     onClick={() => setFormData({ ...formData, infrastructure_target: 'kubernetes_cluster' })}
                     className={`rounded-lg border p-3 text-left transition-all ${
                       formData.infrastructure_target === 'kubernetes_cluster'
@@ -624,32 +905,32 @@ export default function ExecuteWorkflowPage() {
                 {formData.infrastructure_target === 'repo' ? (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Infrastructure Repo URL *</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Infrastructure Repo URL *</label>
                       <input
                         type="text"
                         value={formData.iac_repo_url}
                         onChange={(e) => setFormData({ ...formData, iac_repo_url: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="https://github.com/company/infrastructure"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Branch</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Branch</label>
                       <input
                         type="text"
                         value={formData.iac_branch}
                         onChange={(e) => setFormData({ ...formData, iac_branch: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="main"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Manifest or IaC Path</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Manifest or IaC Path</label>
                       <input
                         type="text"
                         value={formData.iac_path}
                         onChange={(e) => setFormData({ ...formData, iac_path: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="k8s/overlays/prod"
                       />
                     </div>
@@ -657,41 +938,41 @@ export default function ExecuteWorkflowPage() {
                 ) : (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Cluster Name *</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Cluster Name *</label>
                       <input
                         type="text"
                         value={formData.cluster_name}
                         onChange={(e) => setFormData({ ...formData, cluster_name: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="prod-eks-us-east-1"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Kubeconfig Context *</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Kubeconfig Context *</label>
                       <input
                         type="text"
                         value={formData.kubeconfig_context}
                         onChange={(e) => setFormData({ ...formData, kubeconfig_context: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="prod-admin"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Namespace Scope</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Namespace Scope</label>
                       <input
                         type="text"
                         value={formData.namespace}
                         onChange={(e) => setFormData({ ...formData, namespace: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         placeholder="all-namespaces"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Cloud Provider</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Cloud Provider</label>
                       <select
                         value={formData.cloud_provider}
                         onChange={(e) => setFormData({ ...formData, cloud_provider: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="aws">AWS</option>
                         <option value="azure">Azure</option>
@@ -700,11 +981,11 @@ export default function ExecuteWorkflowPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Compliance Profile</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Compliance Profile</label>
                       <select
                         value={formData.compliance_profile}
                         onChange={(e) => setFormData({ ...formData, compliance_profile: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="cis-kubernetes">CIS Kubernetes</option>
                         <option value="nsa-cisa">NSA/CISA</option>
@@ -712,12 +993,12 @@ export default function ExecuteWorkflowPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Timeout Seconds</label>
+                      <label className="mb-2 block text-sm font-medium text-gray-300">Timeout Seconds</label>
                       <input
                         type="number"
                         value={formData.timeout}
                         onChange={(e) => setFormData({ ...formData, timeout: e.target.value })}
-                        className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                         min="60"
                         max="3600"
                       />
@@ -727,12 +1008,12 @@ export default function ExecuteWorkflowPage() {
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Severity Levels</label>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">Severity Levels</label>
                     <input
                       type="text"
                       value={formData.severity_levels}
                       onChange={(e) => setFormData({ ...formData, severity_levels: e.target.value })}
-                      className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
                       placeholder="CRITICAL,HIGH,MEDIUM"
                     />
                   </div>
@@ -787,35 +1068,115 @@ export default function ExecuteWorkflowPage() {
                 )}
               </div>
             )}
-            <div className="flex gap-3">
+
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button
+                type="button"
                 onClick={addNewWorkflow}
-                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold transition-all"
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-2 font-semibold transition-all hover:from-purple-600 hover:to-pink-600"
               >
+                <Play className="h-4 w-4" />
                 Start Workflow
               </button>
               <button
+                type="button"
                 onClick={() => setShowAddForm(false)}
-                className="px-6 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-semibold transition-all"
+                className="rounded-lg bg-gray-700 px-6 py-2 font-semibold transition-all hover:bg-gray-600"
               >
                 Cancel
               </button>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Workflows List */}
-        {workflows.length === 0 ? (
-          <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-12 text-center">
-            <div className="text-6xl mb-4">🚀</div>
-            <h3 className="text-xl font-semibold mb-2">No Active Workflows</h3>
-            <p className="text-gray-400 mb-6">Click "Add Workflow" to start a new security scan</p>
+        <section className="mb-6 rounded-lg border border-gray-700 bg-gray-800/50 p-6 backdrop-blur-sm">
+          <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Batch Repository Remediation</h2>
+              <p className="text-sm text-gray-400">Add repository targets, then start the backend batch workflow.</p>
+            </div>
             <button
-              onClick={() => setShowAddForm(true)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 rounded-lg font-semibold transition-all inline-flex items-center gap-2"
+              type="button"
+              onClick={addRepositoryInput}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold transition-colors hover:bg-gray-800"
             >
-              <span className="text-xl">+</span> Add Your First Workflow
+              <Plus className="h-4 w-4" />
+              Add Repository
             </button>
+          </div>
+
+          <div className="space-y-3">
+            {repositoryInputs.map((input, index) => (
+              <div
+                key={input.id}
+                className="grid grid-cols-1 gap-3 rounded-lg border border-gray-700 bg-gray-900/70 p-4 md:grid-cols-[minmax(0,1fr)_180px_44px]"
+              >
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Repository URL {index + 1}
+                  </label>
+                  <input
+                    type="text"
+                    value={input.repo_url}
+                    onChange={(e) => updateRepositoryInput(input.id, { repo_url: e.target.value })}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                    placeholder="https://github.com/user/repo"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-300">
+                    Branch
+                  </label>
+                  <input
+                    type="text"
+                    value={input.branch}
+                    onChange={(e) => updateRepositoryInput(input.id, { branch: e.target.value })}
+                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                    placeholder="main"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => removeRepositoryInput(input.id)}
+                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-red-600 hover:text-white"
+                    aria-label={`Remove repository ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {batchError && (
+            <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {batchError}
+            </div>
+          )}
+          {batchMessage && !batchError && (
+            <div className="mt-4 rounded-lg border border-purple-500/30 bg-purple-500/10 px-4 py-3 text-sm text-purple-100">
+              {batchMessage}
+            </div>
+          )}
+
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={triggerBatchWorkflow}
+              disabled={isTriggering}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-pink-500 px-6 py-3 font-semibold transition-all hover:from-purple-600 hover:to-pink-600 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+            >
+              <Play className="h-5 w-5" />
+              {isTriggering ? 'Triggering Batch...' : 'Trigger Batch'}
+            </button>
+          </div>
+        </section>
+
+        {workflows.length === 0 ? (
+          <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-12 text-center backdrop-blur-sm">
+            <h3 className="mb-2 text-xl font-semibold">No Workflow Runs</h3>
+            <p className="text-gray-400">Start a single workflow, infrastructure scan, or repository batch to begin live tracking.</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -838,29 +1199,22 @@ export default function ExecuteWorkflowPage() {
           </div>
         )}
 
-        {/* Stats */}
         {workflows.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-4">
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 backdrop-blur-sm">
               <div className="text-2xl font-bold text-purple-400">{workflows.length}</div>
               <div className="text-sm text-gray-400">Total Workflows</div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-4">
-              <div className="text-2xl font-bold text-yellow-400">
-                {workflows.filter(w => w.status === 'running').length}
-              </div>
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 backdrop-blur-sm">
+              <div className="text-2xl font-bold text-yellow-400">{runningCount}</div>
               <div className="text-sm text-gray-400">Running</div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-4">
-              <div className="text-2xl font-bold text-green-400">
-                {workflows.filter(w => w.status === 'completed').length}
-              </div>
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 backdrop-blur-sm">
+              <div className="text-2xl font-bold text-green-400">{completedCount}</div>
               <div className="text-sm text-gray-400">Completed</div>
             </div>
-            <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl border border-gray-700 p-4">
-              <div className="text-2xl font-bold text-red-400">
-                {workflows.filter(w => w.status === 'failed').length}
-              </div>
+            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4 backdrop-blur-sm">
+              <div className="text-2xl font-bold text-red-400">{failedCount}</div>
               <div className="text-sm text-gray-400">Failed</div>
             </div>
           </div>
@@ -869,5 +1223,3 @@ export default function ExecuteWorkflowPage() {
     </div>
   );
 }
-
-// Made with Bob
