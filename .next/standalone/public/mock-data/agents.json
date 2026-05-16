@@ -1,0 +1,320 @@
+{
+  "agents": [
+    {
+      "id": "agent-001",
+      "name": "Trivy Scanner",
+      "type": "scanner",
+      "version": "0.48.0",
+      "status": "active",
+      "capabilities": {
+        "scan_types": ["container", "filesystem", "repository", "sbom"],
+        "vulnerability_detection": true,
+        "misconfiguration_detection": true,
+        "secret_detection": true,
+        "license_scanning": true,
+        "supported_languages": ["go", "python", "javascript", "java", "ruby", "php", "rust"],
+        "supported_os": ["alpine", "debian", "ubuntu", "centos", "rhel", "amazon-linux"]
+      },
+      "configuration": {
+        "severity_threshold": "MEDIUM",
+        "ignore_unfixed": false,
+        "timeout": "5m",
+        "cache_dir": "/tmp/trivy-cache"
+      },
+      "metadata": {
+        "vendor": "Aqua Security",
+        "documentation": "https://aquasecurity.github.io/trivy/",
+        "license": "Apache-2.0"
+      },
+      "last_heartbeat": "2024-05-13T14:59:00Z",
+      "registered_at": "2024-05-01T10:00:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 45,
+        "last_check": "2024-05-13T14:59:00Z"
+      },
+      "execution_stats": {
+        "total_executions": 1247,
+        "successful_executions": 1235,
+        "failed_executions": 12,
+        "average_duration_ms": 3500
+      }
+    },
+    {
+      "id": "agent-002",
+      "name": "Snyk Scanner",
+      "type": "scanner",
+      "version": "1.1290.0",
+      "status": "active",
+      "capabilities": {
+        "scan_types": ["dependencies", "code", "container", "iac"],
+        "vulnerability_detection": true,
+        "license_scanning": true,
+        "fix_suggestions": true,
+        "supported_languages": ["javascript", "typescript", "python", "java", "go", "ruby", "php", "scala", "swift", "kotlin"],
+        "supported_package_managers": ["npm", "yarn", "pip", "maven", "gradle", "go-mod", "bundler", "composer"]
+      },
+      "configuration": {
+        "severity_threshold": "low",
+        "fail_on": "upgradable",
+        "prune_repeated_subdependencies": true
+      },
+      "metadata": {
+        "vendor": "Snyk",
+        "documentation": "https://docs.snyk.io/",
+        "license": "Proprietary"
+      },
+      "last_heartbeat": "2024-05-13T14:58:30Z",
+      "registered_at": "2024-05-01T10:15:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 67,
+        "last_check": "2024-05-13T14:58:30Z"
+      },
+      "execution_stats": {
+        "total_executions": 892,
+        "successful_executions": 885,
+        "failed_executions": 7,
+        "average_duration_ms": 4200
+      }
+    },
+    {
+      "id": "agent-003",
+      "name": "Checkov Scanner",
+      "type": "scanner",
+      "version": "3.2.0",
+      "status": "active",
+      "capabilities": {
+        "scan_types": ["iac", "secrets", "sca"],
+        "misconfiguration_detection": true,
+        "policy_enforcement": true,
+        "supported_iac": ["terraform", "cloudformation", "kubernetes", "helm", "arm", "serverless"],
+        "supported_cloud_providers": ["aws", "azure", "gcp", "alibaba"]
+      },
+      "configuration": {
+        "framework": ["all"],
+        "skip_check": [],
+        "compact": true,
+        "quiet": false
+      },
+      "metadata": {
+        "vendor": "Bridgecrew (Palo Alto Networks)",
+        "documentation": "https://www.checkov.io/",
+        "license": "Apache-2.0"
+      },
+      "last_heartbeat": "2024-05-13T14:59:15Z",
+      "registered_at": "2024-05-01T10:30:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 52,
+        "last_check": "2024-05-13T14:59:15Z"
+      },
+      "execution_stats": {
+        "total_executions": 654,
+        "successful_executions": 650,
+        "failed_executions": 4,
+        "average_duration_ms": 2800
+      }
+    },
+    {
+      "id": "agent-004",
+      "name": "Semgrep Scanner",
+      "type": "scanner",
+      "version": "1.60.0",
+      "status": "active",
+      "capabilities": {
+        "scan_types": ["sast", "secrets"],
+        "vulnerability_detection": true,
+        "custom_rules": true,
+        "supported_languages": ["python", "javascript", "typescript", "java", "go", "ruby", "php", "c", "cpp", "rust", "kotlin", "swift"]
+      },
+      "configuration": {
+        "config": "auto",
+        "metrics": "off",
+        "severity": ["ERROR", "WARNING"]
+      },
+      "metadata": {
+        "vendor": "Semgrep Inc.",
+        "documentation": "https://semgrep.dev/docs/",
+        "license": "LGPL-2.1"
+      },
+      "last_heartbeat": "2024-05-13T14:58:45Z",
+      "registered_at": "2024-05-01T10:45:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 38,
+        "last_check": "2024-05-13T14:58:45Z"
+      },
+      "execution_stats": {
+        "total_executions": 543,
+        "successful_executions": 540,
+        "failed_executions": 3,
+        "average_duration_ms": 5100
+      }
+    },
+    {
+      "id": "agent-005",
+      "name": "Dependency Fixer",
+      "type": "remediation",
+      "version": "2.1.0",
+      "status": "active",
+      "capabilities": {
+        "fix_types": ["dependency_upgrade", "version_pinning"],
+        "auto_pr_creation": true,
+        "breaking_change_detection": true,
+        "supported_package_managers": ["npm", "yarn", "pip", "maven", "gradle", "go-mod", "bundler", "composer", "cargo"]
+      },
+      "configuration": {
+        "auto_merge": false,
+        "create_branch": true,
+        "run_tests": true,
+        "update_strategy": "conservative"
+      },
+      "metadata": {
+        "vendor": "Internal",
+        "documentation": "https://docs.agentic-orchestrator.io/agents/dependency-fixer",
+        "license": "MIT"
+      },
+      "last_heartbeat": "2024-05-13T14:59:30Z",
+      "registered_at": "2024-05-01T11:00:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 41,
+        "last_check": "2024-05-13T14:59:30Z"
+      },
+      "execution_stats": {
+        "total_executions": 234,
+        "successful_executions": 228,
+        "failed_executions": 6,
+        "average_duration_ms": 8500
+      }
+    },
+    {
+      "id": "agent-006",
+      "name": "Code Patcher AI",
+      "type": "remediation",
+      "version": "1.5.0",
+      "status": "active",
+      "capabilities": {
+        "fix_types": ["code_fix", "security_patch", "refactoring"],
+        "ai_powered": true,
+        "auto_pr_creation": true,
+        "explanation_generation": true,
+        "supported_languages": ["python", "javascript", "typescript", "java", "go", "ruby", "php"]
+      },
+      "configuration": {
+        "model": "gpt-4",
+        "confidence_threshold": 0.85,
+        "max_changes_per_file": 10,
+        "include_tests": true
+      },
+      "metadata": {
+        "vendor": "Internal",
+        "documentation": "https://docs.agentic-orchestrator.io/agents/code-patcher",
+        "license": "MIT"
+      },
+      "last_heartbeat": "2024-05-13T14:59:45Z",
+      "registered_at": "2024-05-01T11:15:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 156,
+        "last_check": "2024-05-13T14:59:45Z"
+      },
+      "execution_stats": {
+        "total_executions": 187,
+        "successful_executions": 179,
+        "failed_executions": 8,
+        "average_duration_ms": 15000
+      }
+    },
+    {
+      "id": "agent-007",
+      "name": "Infrastructure Fixer",
+      "type": "remediation",
+      "version": "1.3.0",
+      "status": "active",
+      "capabilities": {
+        "fix_types": ["iac_fix", "configuration_update", "policy_compliance"],
+        "auto_pr_creation": true,
+        "validation": true,
+        "supported_iac": ["terraform", "cloudformation", "kubernetes", "helm", "ansible"]
+      },
+      "configuration": {
+        "validate_before_commit": true,
+        "run_plan": true,
+        "auto_approve": false
+      },
+      "metadata": {
+        "vendor": "Internal",
+        "documentation": "https://docs.agentic-orchestrator.io/agents/infrastructure-fixer",
+        "license": "MIT"
+      },
+      "last_heartbeat": "2024-05-13T14:59:00Z",
+      "registered_at": "2024-05-01T11:30:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 73,
+        "last_check": "2024-05-13T14:59:00Z"
+      },
+      "execution_stats": {
+        "total_executions": 145,
+        "successful_executions": 142,
+        "failed_executions": 3,
+        "average_duration_ms": 6800
+      }
+    },
+    {
+      "id": "agent-008",
+      "name": "SonarQube Scanner",
+      "type": "scanner",
+      "version": "5.0.0",
+      "status": "active",
+      "capabilities": {
+        "scan_types": ["code_quality", "security", "bugs", "code_smells"],
+        "vulnerability_detection": true,
+        "quality_gates": true,
+        "supported_languages": ["java", "javascript", "typescript", "python", "c", "cpp", "csharp", "go", "kotlin", "ruby", "scala", "swift", "php"]
+      },
+      "configuration": {
+        "quality_gate": "Sonar way",
+        "coverage_threshold": 80,
+        "duplications_threshold": 3
+      },
+      "metadata": {
+        "vendor": "SonarSource",
+        "documentation": "https://docs.sonarqube.org/",
+        "license": "LGPL-3.0"
+      },
+      "last_heartbeat": "2024-05-13T14:58:15Z",
+      "registered_at": "2024-05-01T11:45:00Z",
+      "health_status": {
+        "status": "healthy",
+        "response_time_ms": 89,
+        "last_check": "2024-05-13T14:58:15Z"
+      },
+      "execution_stats": {
+        "total_executions": 432,
+        "successful_executions": 428,
+        "failed_executions": 4,
+        "average_duration_ms": 12000
+      }
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "by_type": {
+      "scanner": 5,
+      "remediation": 3
+    },
+    "by_status": {
+      "active": 8,
+      "inactive": 0,
+      "unhealthy": 0
+    },
+    "health": {
+      "healthy": 8,
+      "degraded": 0,
+      "unhealthy": 0
+    }
+  }
+}

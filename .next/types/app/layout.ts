@@ -1,4 +1,4 @@
-// File: C:\Semicolon 2026\semicolon26-frontend\src\app\layout.tsx
+// File: C:\Users\sanjay_katariya\Semicolon\semicolon26-frontend\src\app\layout.tsx
 import * as entry from '../../../src/app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

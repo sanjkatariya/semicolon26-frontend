@@ -1,0 +1,14 @@
+{
+  "/api/v1/agents/configurations/[agentId]/input-form/route": "/api/v1/agents/configurations/[agentId]/input-form",
+  "/api/v1/agents/results/[executionId]/route": "/api/v1/agents/results/[executionId]",
+  "/_not-found/page": "/_not-found",
+  "/agent-config-demo/page": "/agent-config-demo",
+  "/agents/page": "/agents",
+  "/agents/register/page": "/agents/register",
+  "/page": "/",
+  "/dashboard/page": "/dashboard",
+  "/workflows/[id]/page": "/workflows/[id]",
+  "/workflows/create/page": "/workflows/create",
+  "/workflows/execute/page": "/workflows/execute",
+  "/workflows/page": "/workflows"
+}
