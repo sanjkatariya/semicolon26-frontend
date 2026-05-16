@@ -142,7 +142,7 @@ export class WorkflowAPIClient {
   /**
    * Get workflow execution details (mock for now)
    */
-  static async getWorkflowExecution(id: string): Promise<any> {
+  static async getWorkflowExecution(_id: string): Promise<any> {
     // This would call a real API endpoint
     return null;
   }

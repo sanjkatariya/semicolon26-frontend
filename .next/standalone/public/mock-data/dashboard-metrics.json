@@ -1,0 +1,321 @@
+{
+  "dashboard": {
+    "overview": {
+      "security_score": 87,
+      "security_score_trend": "+5",
+      "total_vulnerabilities": 127,
+      "vulnerabilities_trend": "-23",
+      "critical_vulnerabilities": 8,
+      "high_vulnerabilities": 34,
+      "medium_vulnerabilities": 52,
+      "low_vulnerabilities": 33,
+      "vulnerabilities_remediated_today": 15,
+      "vulnerabilities_remediated_this_week": 67,
+      "vulnerabilities_remediated_this_month": 234,
+      "mean_time_to_remediate_hours": 18.5,
+      "mttr_trend": "-6.2",
+      "automation_rate": 94,
+      "automation_rate_trend": "+3",
+      "active_agents": 8,
+      "healthy_agents": 8,
+      "unhealthy_agents": 0,
+      "active_workflows": 3,
+      "completed_workflows_today": 12,
+      "open_pull_requests": 23,
+      "merged_pull_requests_today": 8,
+      "compliance_score": 92,
+      "compliance_frameworks": ["SOC2", "ISO27001", "PCI-DSS"],
+      "policy_violations": 3,
+      "last_updated": "2024-05-13T15:00:00Z"
+    },
+    "vulnerability_trends": {
+      "last_30_days": [
+        { "date": "2024-04-14", "critical": 12, "high": 45, "medium": 67, "low": 42, "total": 166 },
+        { "date": "2024-04-15", "critical": 11, "high": 43, "medium": 65, "low": 41, "total": 160 },
+        { "date": "2024-04-16", "critical": 10, "high": 42, "medium": 64, "low": 40, "total": 156 },
+        { "date": "2024-04-17", "critical": 10, "high": 41, "medium": 63, "low": 39, "total": 153 },
+        { "date": "2024-04-18", "critical": 9, "high": 40, "medium": 62, "low": 38, "total": 149 },
+        { "date": "2024-04-19", "critical": 9, "high": 39, "medium": 61, "low": 37, "total": 146 },
+        { "date": "2024-04-20", "critical": 8, "high": 38, "medium": 60, "low": 36, "total": 142 },
+        { "date": "2024-04-21", "critical": 8, "high": 37, "medium": 59, "low": 35, "total": 139 },
+        { "date": "2024-05-13", "critical": 8, "high": 34, "medium": 52, "low": 33, "total": 127 }
+      ]
+    },
+    "remediation_metrics": {
+      "by_severity": {
+        "critical": {
+          "detected": 45,
+          "remediated": 37,
+          "in_progress": 5,
+          "open": 3,
+          "avg_time_hours": 12.3
+        },
+        "high": {
+          "detected": 156,
+          "remediated": 122,
+          "in_progress": 18,
+          "open": 16,
+          "avg_time_hours": 24.7
+        },
+        "medium": {
+          "detected": 234,
+          "remediated": 182,
+          "in_progress": 28,
+          "open": 24,
+          "avg_time_hours": 48.2
+        },
+        "low": {
+          "detected": 189,
+          "remediated": 156,
+          "in_progress": 15,
+          "open": 18,
+          "avg_time_hours": 96.5
+        }
+      },
+      "by_type": {
+        "code_fix": 234,
+        "dependency_upgrade": 189,
+        "configuration_change": 87,
+        "infrastructure_fix": 45
+      },
+      "success_rate": 96.5,
+      "automated_rate": 94.2,
+      "manual_rate": 5.8
+    },
+    "agent_performance": {
+      "scanners": [
+        {
+          "name": "Trivy",
+          "executions": 1247,
+          "success_rate": 99.2,
+          "avg_duration_ms": 3500,
+          "vulnerabilities_found": 2345
+        },
+        {
+          "name": "Snyk",
+          "executions": 892,
+          "success_rate": 99.3,
+          "avg_duration_ms": 4200,
+          "vulnerabilities_found": 1876
+        },
+        {
+          "name": "Checkov",
+          "executions": 654,
+          "success_rate": 99.4,
+          "avg_duration_ms": 2800,
+          "vulnerabilities_found": 987
+        },
+        {
+          "name": "Semgrep",
+          "executions": 543,
+          "success_rate": 99.4,
+          "avg_duration_ms": 5100,
+          "vulnerabilities_found": 1234
+        },
+        {
+          "name": "SonarQube",
+          "executions": 432,
+          "success_rate": 99.1,
+          "avg_duration_ms": 12000,
+          "vulnerabilities_found": 1567
+        }
+      ],
+      "remediators": [
+        {
+          "name": "Dependency Fixer",
+          "executions": 234,
+          "success_rate": 97.4,
+          "avg_duration_ms": 8500,
+          "fixes_applied": 228
+        },
+        {
+          "name": "Code Patcher AI",
+          "executions": 187,
+          "success_rate": 95.7,
+          "avg_duration_ms": 15000,
+          "fixes_applied": 179
+        },
+        {
+          "name": "Infrastructure Fixer",
+          "executions": 145,
+          "success_rate": 97.9,
+          "avg_duration_ms": 6800,
+          "fixes_applied": 142
+        }
+      ]
+    },
+    "workflow_statistics": {
+      "total_runs": 456,
+      "successful_runs": 442,
+      "failed_runs": 14,
+      "success_rate": 96.9,
+      "avg_duration_minutes": 18.7,
+      "total_steps_executed": 5016,
+      "avg_steps_per_workflow": 11,
+      "workflows_by_trigger": {
+        "scheduled": 234,
+        "vulnerability_detected": 189,
+        "manual": 33
+      }
+    },
+    "pull_request_metrics": {
+      "total_created": 445,
+      "merged": 398,
+      "open": 23,
+      "closed_without_merge": 24,
+      "merge_rate": 89.4,
+      "avg_time_to_merge_hours": 36.5,
+      "avg_reviews_per_pr": 2.3,
+      "auto_merged": 67,
+      "manual_merged": 331
+    },
+    "compliance_status": {
+      "frameworks": [
+        {
+          "name": "SOC2",
+          "score": 94,
+          "controls_total": 64,
+          "controls_passing": 60,
+          "controls_failing": 4,
+          "last_audit": "2024-05-01T00:00:00Z"
+        },
+        {
+          "name": "ISO27001",
+          "score": 91,
+          "controls_total": 114,
+          "controls_passing": 104,
+          "controls_failing": 10,
+          "last_audit": "2024-05-01T00:00:00Z"
+        },
+        {
+          "name": "PCI-DSS",
+          "score": 89,
+          "controls_total": 78,
+          "controls_passing": 69,
+          "controls_failing": 9,
+          "last_audit": "2024-05-01T00:00:00Z"
+        },
+        {
+          "name": "HIPAA",
+          "score": 93,
+          "controls_total": 45,
+          "controls_passing": 42,
+          "controls_failing": 3,
+          "last_audit": "2024-05-01T00:00:00Z"
+        }
+      ],
+      "overall_score": 92,
+      "trend": "+2"
+    },
+    "recent_activity": [
+      {
+        "id": "activity-001",
+        "type": "workflow_completed",
+        "title": "Automated Vulnerability Remediation completed",
+        "description": "Fixed 2 critical vulnerabilities, created 2 PRs",
+        "timestamp": "2024-05-13T14:45:30Z",
+        "severity": "info",
+        "user": "system"
+      },
+      {
+        "id": "activity-002",
+        "type": "pr_merged",
+        "title": "PR #1230 merged to main",
+        "description": "Security fix for XSS vulnerability",
+        "timestamp": "2024-05-13T14:30:00Z",
+        "severity": "success",
+        "user": "john.doe@company.com"
+      },
+      {
+        "id": "activity-003",
+        "type": "vulnerability_detected",
+        "title": "5 new vulnerabilities detected",
+        "description": "Trivy scan found 2 critical, 2 high, 1 medium",
+        "timestamp": "2024-05-13T14:15:00Z",
+        "severity": "warning",
+        "user": "system"
+      },
+      {
+        "id": "activity-004",
+        "type": "agent_registered",
+        "title": "New agent registered: Custom Scanner v1.0",
+        "description": "Agent successfully registered and health check passed",
+        "timestamp": "2024-05-13T13:45:00Z",
+        "severity": "info",
+        "user": "admin@company.com"
+      },
+      {
+        "id": "activity-005",
+        "type": "compliance_violation",
+        "title": "SOC2 compliance violation detected",
+        "description": "Critical vulnerability not remediated within SLA",
+        "timestamp": "2024-05-13T13:30:00Z",
+        "severity": "error",
+        "user": "system"
+      }
+    ],
+    "top_repositories": [
+      {
+        "name": "backend-api",
+        "vulnerabilities": 45,
+        "critical": 3,
+        "high": 12,
+        "remediation_rate": 87,
+        "last_scan": "2024-05-13T14:30:00Z"
+      },
+      {
+        "name": "frontend-app",
+        "vulnerabilities": 23,
+        "critical": 1,
+        "high": 7,
+        "remediation_rate": 92,
+        "last_scan": "2024-05-13T14:15:00Z"
+      },
+      {
+        "name": "k8s-manifests",
+        "vulnerabilities": 18,
+        "critical": 2,
+        "high": 5,
+        "remediation_rate": 78,
+        "last_scan": "2024-05-13T14:00:00Z"
+      },
+      {
+        "name": "microservice-auth",
+        "vulnerabilities": 12,
+        "critical": 1,
+        "high": 3,
+        "remediation_rate": 95,
+        "last_scan": "2024-05-13T13:45:00Z"
+      },
+      {
+        "name": "data-pipeline",
+        "vulnerabilities": 29,
+        "critical": 1,
+        "high": 7,
+        "remediation_rate": 83,
+        "last_scan": "2024-05-13T13:30:00Z"
+      }
+    ],
+    "system_health": {
+      "overall_status": "healthy",
+      "services": [
+        { "name": "API Gateway", "status": "healthy", "uptime": 99.98 },
+        { "name": "Identity Service", "status": "healthy", "uptime": 99.95 },
+        { "name": "Agent Registry", "status": "healthy", "uptime": 99.97 },
+        { "name": "Agent Runtime", "status": "healthy", "uptime": 99.92 },
+        { "name": "Workflow Orchestrator", "status": "healthy", "uptime": 99.94 },
+        { "name": "Vulnerability Service", "status": "healthy", "uptime": 99.96 },
+        { "name": "Remediation Engine", "status": "healthy", "uptime": 99.93 },
+        { "name": "Git Integration", "status": "healthy", "uptime": 99.91 },
+        { "name": "PR Automation", "status": "healthy", "uptime": 99.89 },
+        { "name": "Notification Service", "status": "healthy", "uptime": 99.99 }
+      ],
+      "infrastructure": {
+        "kafka": { "status": "healthy", "lag": 0 },
+        "postgresql": { "status": "healthy", "connections": 45 },
+        "redis": { "status": "healthy", "memory_usage": 67 },
+        "elasticsearch": { "status": "healthy", "cluster_health": "green" }
+      }
+    }
+  }
+}

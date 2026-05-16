@@ -30,7 +30,7 @@ export default function DynamicAgentReport({ executionId }: DynamicAgentReportPr
       });
   }, [executionId]);
 
-  const renderOutput = (fieldName: string, fieldSchema: FieldSchema, value: any) => {
+  const renderOutput = (_fieldName: string, fieldSchema: FieldSchema, value: any) => {
     if (value === null || value === undefined) {
       return <div className="text-slate-500 text-sm">No data</div>;
     }

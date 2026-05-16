@@ -37,7 +37,7 @@ export default function DynamicAgentForm({ agentId, onSubmit, onCancel }: Dynami
       });
   }, [agentId]);
 
-  const validateField = (fieldName: string, value: any, fieldSchema: FieldSchema): string | null => {
+  const validateField = (_fieldName: string, value: any, fieldSchema: FieldSchema): string | null => {
     const validation = fieldSchema.validation;
     if (!validation) return null;
 

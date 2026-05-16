@@ -32,7 +32,7 @@ interface WorkflowCardProps {
 }
 
 export default function WorkflowCard({
-  id,
+  id: _id,
   repoUrl,
   branch,
   status,
