@@ -14,7 +14,6 @@ export default function Navigation() {
     { href: '/workflows', label: 'Workflows', icon: '⚙️' },
     { href: '/agent-config-demo', label: 'Config Demo', icon: '🧪' },
     { href: '/pull-requests', label: 'Pull Requests', icon: '📝' },
-    { href: '/events', label: 'Events', icon: '📡' },
   ];
 
   return (
