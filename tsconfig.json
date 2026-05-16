@@ -37,5 +37,3 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "../mock-data/**/*.json"],
   "exclude": ["node_modules"]
 }
-
-// Made with Bob

@@ -2,7 +2,22 @@
 
 import { WorkflowTriggerRequest, WorkflowEvent } from '@/types/workflow-execution';
 
-const WORKFLOW_API_BASE = process.env.NEXT_PUBLIC_WORKFLOW_API_URL || 'http://127.0.0.1:8010';
+const WORKFLOW_API_BASE = process.env.WORKFLOW_API_BASE?.replace(/\/+$/, '');
+const WORKFLOW_APP_ID = process.env.APP_ID;
+
+if (!WORKFLOW_API_BASE) {
+  throw new Error('WORKFLOW_API_BASE is not configured. Set it in .env and restart Next.js.');
+}
+
+function buildWorkflowTriggerUrl(): string {
+  const url = new URL('/api/workflow/trigger', `${WORKFLOW_API_BASE}/`);
+
+  if (WORKFLOW_APP_ID) {
+    url.searchParams.set('app', WORKFLOW_APP_ID);
+  }
+
+  return url.toString();
+}
 
 export class WorkflowAPIClient {
   /**
@@ -15,7 +30,7 @@ export class WorkflowAPIClient {
     onError?: (error: Error) => void,
     onComplete?: () => void
   ): EventSource {
-    const url = `${WORKFLOW_API_BASE}/api/workflow/trigger`;
+    const url = buildWorkflowTriggerUrl();
     
     // Create EventSource with POST data (using fetch for POST, then EventSource for streaming)
     // Note: EventSource doesn't support POST directly, so we need a workaround
