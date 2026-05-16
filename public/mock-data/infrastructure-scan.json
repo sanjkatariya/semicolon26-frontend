@@ -1,0 +1,350 @@
+{
+  "workflow": {
+    "id": "infra-scan-workflow",
+    "name": "Infrastructure Security Scan",
+    "description": "Scan IaC repositories or live Kubernetes clusters with a compact 4-agent workflow",
+    "agent_count": 4
+  },
+  "input_requirements": {
+    "repo": [
+      {
+        "field": "repository_url",
+        "label": "Repository URL",
+        "required": true,
+        "example": "https://github.com/company/infrastructure"
+      },
+      {
+        "field": "branch",
+        "label": "Branch",
+        "required": true,
+        "example": "main"
+      },
+      {
+        "field": "manifest_path",
+        "label": "Manifest or IaC Path",
+        "required": false,
+        "example": "k8s/overlays/prod"
+      }
+    ],
+    "kubernetes_cluster": [
+      {
+        "field": "cluster_name",
+        "label": "Cluster Name",
+        "required": true,
+        "example": "prod-eks-us-east-1"
+      },
+      {
+        "field": "kubeconfig_context",
+        "label": "Kubeconfig Context",
+        "required": true,
+        "example": "arn:aws:eks:us-east-1:123456789012:cluster/prod-eks"
+      },
+      {
+        "field": "namespace",
+        "label": "Namespace Scope",
+        "required": false,
+        "example": "default, payments, ingress-nginx"
+      },
+      {
+        "field": "cloud_provider",
+        "label": "Cloud Provider",
+        "required": false,
+        "example": "aws"
+      },
+      {
+        "field": "compliance_profile",
+        "label": "Compliance Profile",
+        "required": false,
+        "example": "cis-kubernetes"
+      }
+    ]
+  },
+  "sample_inputs": {
+    "repo": {
+      "repository_url": "https://github.com/company/infrastructure",
+      "branch": "main",
+      "manifest_path": "k8s/overlays/prod",
+      "severity_levels": ["CRITICAL", "HIGH", "MEDIUM"],
+      "compliance_profile": "cis-kubernetes"
+    },
+    "kubernetes_cluster": {
+      "cluster_name": "prod-eks-us-east-1",
+      "kubeconfig_context": "prod-admin",
+      "namespace": "all-namespaces",
+      "cloud_provider": "aws",
+      "severity_levels": ["CRITICAL", "HIGH", "MEDIUM"],
+      "compliance_profile": "cis-kubernetes",
+      "include_rbac": true,
+      "include_network_policies": true,
+      "include_secrets": false,
+      "timeout": 600
+    }
+  },
+  "executions": {
+    "repo": {
+      "target_label": "company/infrastructure:k8s/overlays/prod",
+      "summary": {
+        "total_vulnerabilities": 4,
+        "critical": 1,
+        "high": 2,
+        "medium": 1,
+        "validation": "passed",
+        "workflow_type": "infrastructure_repo_scan"
+      },
+      "agents": [
+        {
+          "agent": "infra_input_agent",
+          "step_name": "Target Preparation",
+          "duration_seconds": 6,
+          "output": {
+            "target_type": "repo",
+            "repository_url": "https://github.com/company/infrastructure",
+            "branch": "main",
+            "manifest_path": "k8s/overlays/prod",
+            "files_discovered": 42,
+            "kubernetes_manifests": 18,
+            "helm_charts": 2
+          }
+        },
+        {
+          "agent": "infrastructure_scanner_agent",
+          "step_name": "IaC Security Scan",
+          "duration_seconds": 31,
+          "output": {
+            "scanner": "checkov",
+            "total_vulnerabilities": 4,
+            "findings": [
+              {
+                "id": "CKV_K8S_30",
+                "title": "Container allows privilege escalation",
+                "severity": "high",
+                "cwe": "CWE-250",
+                "package": "kubernetes-deployment",
+                "repository_name": "company/infrastructure",
+                "repository_url": "https://github.com/company/infrastructure",
+                "file_path": "k8s/overlays/prod/api-deployment.yaml",
+                "overview": "allowPrivilegeEscalation is not set to false for the api container.",
+                "recommendation": "Set securityContext.allowPrivilegeEscalation to false."
+              },
+              {
+                "id": "CKV_K8S_21",
+                "title": "Default namespace is used",
+                "severity": "medium",
+                "cwe": "CWE-668",
+                "package": "kubernetes-namespace",
+                "repository_name": "company/infrastructure",
+                "repository_url": "https://github.com/company/infrastructure",
+                "file_path": "k8s/base/service.yaml",
+                "overview": "Workloads are deployed to the default namespace.",
+                "recommendation": "Deploy workloads to an application-specific namespace."
+              },
+              {
+                "id": "CKV_K8S_8",
+                "title": "Liveness probe is missing",
+                "severity": "high",
+                "package": "kubernetes-deployment",
+                "repository_name": "company/infrastructure",
+                "repository_url": "https://github.com/company/infrastructure",
+                "file_path": "k8s/base/worker-deployment.yaml",
+                "overview": "The worker container does not define a liveness probe.",
+                "recommendation": "Add an HTTP, TCP, or command liveness probe."
+              },
+              {
+                "id": "CKV_K8S_35",
+                "title": "Secret is mounted as environment variable",
+                "severity": "critical",
+                "cwe": "CWE-522",
+                "package": "kubernetes-secret",
+                "repository_name": "company/infrastructure",
+                "repository_url": "https://github.com/company/infrastructure",
+                "file_path": "k8s/base/api-deployment.yaml",
+                "overview": "Database credentials are exposed through environment variables.",
+                "recommendation": "Mount sensitive data from a secret volume or use an external secret provider."
+              }
+            ]
+          }
+        },
+        {
+          "agent": "infrastructure_analysis_agent",
+          "step_name": "Risk Analysis",
+          "duration_seconds": 9,
+          "output": {
+            "analysis": [
+              {
+                "dependency": "kubernetes-secret",
+                "issue_type": "Infrastructure Misconfiguration",
+                "severity": "CRITICAL",
+                "current_version": "env-secret",
+                "recommended_version": "secret-volume",
+                "explanation": "Secret exposure has the highest blast radius because application pods can leak credentials through process inspection or debug dumps.",
+                "fix_strategy": "Move credentials to a mounted secret volume or external secrets provider.",
+                "cwe": "CWE-522"
+              }
+            ],
+            "priority_order": ["CKV_K8S_35", "CKV_K8S_30", "CKV_K8S_8", "CKV_K8S_21"]
+          }
+        },
+        {
+          "agent": "infrastructure_report_agent",
+          "step_name": "Report & Recommendations",
+          "duration_seconds": 5,
+          "output": {
+            "validation": "passed",
+            "recommendations_created": 4,
+            "remediation_plan": "Open a PR that updates pod securityContext, namespace placement, health checks, and secret mounting.",
+            "next_action": "Create remediation PR"
+          }
+        }
+      ]
+    },
+    "kubernetes_cluster": {
+      "target_label": "prod-eks-us-east-1/all-namespaces",
+      "summary": {
+        "total_vulnerabilities": 6,
+        "critical": 1,
+        "high": 3,
+        "medium": 2,
+        "validation": "passed",
+        "workflow_type": "kubernetes_cluster_scan"
+      },
+      "agents": [
+        {
+          "agent": "cluster_access_agent",
+          "step_name": "Cluster Access Check",
+          "duration_seconds": 4,
+          "output": {
+            "target_type": "kubernetes_cluster",
+            "cluster_name": "prod-eks-us-east-1",
+            "kubeconfig_context": "prod-admin",
+            "namespace": "all-namespaces",
+            "api_server_reachable": true,
+            "permissions": ["get pods", "list deployments", "list roles", "list networkpolicies"],
+            "nodes": 8,
+            "namespaces": 12,
+            "workloads": 64
+          }
+        },
+        {
+          "agent": "kubernetes_scanner_agent",
+          "step_name": "Kubernetes Cluster Scan",
+          "duration_seconds": 42,
+          "output": {
+            "scanner": "kubescape",
+            "total_vulnerabilities": 6,
+            "findings": [
+              {
+                "id": "K8S-RBAC-001",
+                "title": "ClusterRole grants wildcard access",
+                "severity": "critical",
+                "cwe": "CWE-732",
+                "package": "clusterrole/admin-automation",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "rbac",
+                "overview": "A ClusterRole grants wildcard verbs and resources.",
+                "recommendation": "Replace wildcard permissions with least-privilege verbs and resource names."
+              },
+              {
+                "id": "K8S-NET-002",
+                "title": "Namespace has no default deny network policy",
+                "severity": "high",
+                "package": "namespace/payments",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "network-policy",
+                "overview": "Pods in payments can receive traffic from any namespace.",
+                "recommendation": "Add default deny ingress and explicit allow rules."
+              },
+              {
+                "id": "K8S-POD-003",
+                "title": "Privileged container is running",
+                "severity": "high",
+                "cwe": "CWE-250",
+                "package": "daemonset/log-forwarder",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "pod-security",
+                "overview": "The log-forwarder container runs with privileged mode enabled.",
+                "recommendation": "Disable privileged mode and grant only the required Linux capabilities."
+              },
+              {
+                "id": "K8S-IMG-004",
+                "title": "Image tag uses latest",
+                "severity": "medium",
+                "package": "deployment/web",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "image-policy",
+                "overview": "A workload uses the mutable latest tag.",
+                "recommendation": "Pin images by immutable tag or digest."
+              },
+              {
+                "id": "K8S-SEC-005",
+                "title": "Service account token automount is enabled",
+                "severity": "medium",
+                "package": "serviceaccount/default",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "service-account",
+                "overview": "Default service account tokens are mounted into pods that do not need Kubernetes API access.",
+                "recommendation": "Set automountServiceAccountToken to false by default."
+              },
+              {
+                "id": "K8S-PSA-006",
+                "title": "Pod Security Admission is not enforced",
+                "severity": "high",
+                "package": "namespace/ingress-nginx",
+                "repository_name": "prod-eks-us-east-1",
+                "repository_url": "kubernetes://prod-eks-us-east-1",
+                "affected_component": "pod-security",
+                "overview": "The namespace does not enforce a restricted Pod Security Admission profile.",
+                "recommendation": "Apply restricted Pod Security Admission labels or an equivalent policy engine."
+              }
+            ]
+          }
+        },
+        {
+          "agent": "kubernetes_analysis_agent",
+          "step_name": "Cluster Risk Analysis",
+          "duration_seconds": 11,
+          "output": {
+            "analysis": [
+              {
+                "dependency": "clusterrole/admin-automation",
+                "issue_type": "RBAC Misconfiguration",
+                "severity": "CRITICAL",
+                "current_version": "wildcard",
+                "recommended_version": "least-privilege",
+                "explanation": "Wildcard RBAC can allow privilege escalation across the cluster.",
+                "fix_strategy": "Create scoped roles and bind only the required service accounts.",
+                "cwe": "CWE-732"
+              },
+              {
+                "dependency": "namespace/payments",
+                "issue_type": "Network Segmentation Gap",
+                "severity": "HIGH",
+                "current_version": "allow-all",
+                "recommended_version": "default-deny",
+                "explanation": "Missing network policies increase lateral movement risk.",
+                "fix_strategy": "Apply default deny policies and explicit app-to-app allow rules."
+              }
+            ],
+            "risk_score": 86,
+            "priority_order": ["K8S-RBAC-001", "K8S-NET-002", "K8S-POD-003", "K8S-PSA-006"]
+          }
+        },
+        {
+          "agent": "infrastructure_report_agent",
+          "step_name": "Report & Recommendations",
+          "duration_seconds": 7,
+          "output": {
+            "validation": "passed",
+            "recommendations_created": 6,
+            "remediation_plan": "Tighten RBAC, add namespace network policies, disable privileged pods, pin images, and enforce Pod Security Admission.",
+            "next_action": "Create policy remediation workflow"
+          }
+        }
+      ]
+    }
+  }
+}
