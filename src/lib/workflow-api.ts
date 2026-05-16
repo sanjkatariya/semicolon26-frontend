@@ -37,7 +37,7 @@ function sanitizeRequestForLogging(value: unknown): unknown {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, fieldValue]) => [
         key,
-        /token|secret|password/i.test(key) && fieldValue
+        /token|secret|password|private_key/i.test(key) && fieldValue
           ? '[redacted]'
           : sanitizeRequestForLogging(fieldValue),
       ])

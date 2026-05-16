@@ -18,8 +18,8 @@ export default function Navigation() {
     { href: '/agents', label: 'Agents', icon: '🤖' },
     { href: '/vulnerabilities', label: 'Vulnerabilities', icon: '🔍' },
     { href: '/workflows', label: 'Workflows', icon: '⚙️' },
-    { href: '/agent-config-demo', label: 'Config Demo', icon: '🧪' },
     { href: '/pull-requests', label: 'Pull Requests', icon: '📝' },
+    { href: '/agent-config-demo', label: 'Quick Scan', icon: '🧪' },
   ];
 
   return (
