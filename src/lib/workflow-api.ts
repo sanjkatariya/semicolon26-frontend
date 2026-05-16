@@ -39,16 +39,26 @@ export class WorkflowAPIClient {
     // We'll use a custom implementation since EventSource doesn't support POST
     const controller = new AbortController();
     
+    console.log('[WorkflowAPI] Starting SSE connection to:', url);
+    console.log('[WorkflowAPI] Request:', request);
+    
     fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
       },
       body: JSON.stringify(request),
       signal: controller.signal,
+      // Important: keep connection alive
+      keepalive: true,
     })
       .then(async (response) => {
+        console.log('[WorkflowAPI] Response status:', response.status);
+        console.log('[WorkflowAPI] Response headers:', Object.fromEntries(response.headers.entries()));
+        
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -60,12 +70,15 @@ export class WorkflowAPIClient {
           throw new Error('No response body');
         }
 
+        console.log('[WorkflowAPI] Starting to read stream...');
         let buffer = '';
+        let eventCount = 0;
 
         while (true) {
           const { done, value } = await reader.read();
 
           if (done) {
+            console.log('[WorkflowAPI] Stream completed. Total events:', eventCount);
             onComplete?.();
             break;
           }
@@ -78,15 +91,23 @@ export class WorkflowAPIClient {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
+                eventCount++;
+                console.log('[WorkflowAPI] Event #' + eventCount + ':', data.event, data.agent || '', data.status || '');
                 onEvent(data as WorkflowEvent);
               } catch (e) {
-                console.error('Failed to parse SSE data:', e);
+                console.error('[WorkflowAPI] Failed to parse SSE data:', line, e);
               }
+            } else if (line.startsWith('event: ')) {
+              console.log('[WorkflowAPI] Event type:', line.slice(7));
+            } else if (line.startsWith(': ')) {
+              // Comment/keep-alive
+              console.log('[WorkflowAPI] Keep-alive ping');
             }
           }
         }
       })
       .catch((error) => {
+        console.error('[WorkflowAPI] Stream error:', error);
         if (error.name !== 'AbortError') {
           onError?.(error);
         }

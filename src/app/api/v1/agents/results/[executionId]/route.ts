@@ -4,10 +4,10 @@ import path from 'path';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { executionId: string } }
+  { params }: { params: Promise<{ executionId: string }> }
 ) {
   try {
-    const { executionId } = params;
+    const { executionId } = await params;
     
     // Map execution IDs to result files
     const resultFiles: Record<string, string> = {

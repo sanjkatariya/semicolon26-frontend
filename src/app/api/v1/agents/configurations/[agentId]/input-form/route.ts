@@ -3,11 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { agentId: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ agentId: string }> }
 ) {
   try {
-    const { agentId } = params;
+    const { agentId } = await params;
     
     // Map agent IDs to config files
     const configFiles: Record<string, string> = {

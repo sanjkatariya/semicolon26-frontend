@@ -19,6 +19,7 @@ export interface AgentStatusEvent {
   timestamp: string;
   data?: Record<string, any>;
   error?: AgentError;
+  message?: string;
 }
 
 export interface WorkflowCompletedEvent {
@@ -27,10 +28,40 @@ export interface WorkflowCompletedEvent {
   timestamp: string;
   message?: string;
   summary?: Record<string, any>;
+  data?: Record<string, any>;
   error?: AgentError;
 }
 
-export type WorkflowEvent = AgentStatusEvent | WorkflowCompletedEvent;
+export interface WorkflowStartedEvent {
+  event: 'workflow_started';
+  timestamp: string;
+  message?: string;
+  data?: Record<string, any>;
+  status?: string;
+  agent?: string;
+}
+
+export interface WorkflowFailedEvent {
+  event: 'workflow_failed';
+  timestamp: string;
+  message?: string;
+  error?: AgentError;
+  data?: Record<string, any>;
+  status?: string;
+  agent?: string;
+}
+
+export interface GenericWorkflowEvent {
+  event: string;
+  timestamp: string;
+  agent?: string;
+  status?: string;
+  message?: string;
+  data?: Record<string, any>;
+  error?: AgentError;
+}
+
+export type WorkflowEvent = AgentStatusEvent | WorkflowCompletedEvent | WorkflowStartedEvent | WorkflowFailedEvent | GenericWorkflowEvent;
 
 export interface WorkflowStep {
   id: string;

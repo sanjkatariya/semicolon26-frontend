@@ -1,0 +1,9 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/workflows/page": "app/workflows/page.js",
+  "/agents/page": "app/agents/page.js",
+  "/agents/register/page": "app/agents/register/page.js",
+  "/workflows/execute/page": "app/workflows/execute/page.js",
+  "/dashboard/page": "app/dashboard/page.js",
+  "/workflows/[id]/page": "app/workflows/[id]/page.js"
+}
