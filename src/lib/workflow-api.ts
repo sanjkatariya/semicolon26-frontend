@@ -1,16 +1,25 @@
 // API client for workflow execution with SSE streaming
 
-import { WorkflowTriggerRequest, WorkflowEvent } from '@/types/workflow-execution';
+import {
+  WorkflowBatchTriggerRequest,
+  WorkflowEvent,
+  WorkflowTriggerRequest,
+} from '@/types/workflow-execution';
 
-const WORKFLOW_API_BASE = process.env.WORKFLOW_API_BASE?.replace(/\/+$/, '');
+const WORKFLOW_API_BASE = (
+  process.env.NEXT_PUBLIC_WORKFLOW_API_BASE ||
+  process.env.WORKFLOW_API_BASE ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  'http://localhost:8000'
+).replace(/\/+$/, '');
 const WORKFLOW_APP_ID = process.env.APP_ID;
 
 if (!WORKFLOW_API_BASE) {
   throw new Error('WORKFLOW_API_BASE is not configured. Set it in .env and restart Next.js.');
 }
 
-function buildWorkflowTriggerUrl(): string {
-  const url = new URL('/api/workflow/trigger', `${WORKFLOW_API_BASE}/`);
+function buildWorkflowUrl(path: string): string {
+  const url = new URL(path, `${WORKFLOW_API_BASE}/`);
 
   if (WORKFLOW_APP_ID) {
     url.searchParams.set('app', WORKFLOW_APP_ID);
@@ -30,7 +39,7 @@ export class WorkflowAPIClient {
     onError?: (error: Error) => void,
     onComplete?: () => void
   ): EventSource {
-    const url = buildWorkflowTriggerUrl();
+    const url = buildWorkflowUrl('/api/workflow/trigger');
     
     // Create EventSource with POST data (using fetch for POST, then EventSource for streaming)
     // Note: EventSource doesn't support POST directly, so we need a workaround
@@ -42,11 +51,30 @@ export class WorkflowAPIClient {
   }
 
   /**
+   * Trigger a batch workflow execution with SSE streaming
+   * Returns an EventSource-like object for cancelling the stream.
+   */
+  static triggerBatchWorkflow(
+    request: WorkflowBatchTriggerRequest,
+    onEvent: (event: WorkflowEvent) => void,
+    onError?: (error: Error) => void,
+    onComplete?: () => void
+  ): EventSource {
+    return this.createSSEConnection(
+      buildWorkflowUrl('/api/workflow/trigger-batch'),
+      request,
+      onEvent,
+      onError,
+      onComplete
+    );
+  }
+
+  /**
    * Create SSE connection using fetch with streaming
    */
   private static createSSEConnection(
     url: string,
-    request: WorkflowTriggerRequest,
+    request: WorkflowTriggerRequest | WorkflowBatchTriggerRequest,
     onEvent: (event: WorkflowEvent) => void,
     onError?: (error: Error) => void,
     onComplete?: () => void
@@ -75,7 +103,10 @@ export class WorkflowAPIClient {
         console.log('[WorkflowAPI] Response headers:', Object.fromEntries(response.headers.entries()));
         
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text().catch(() => '');
+          throw new Error(
+            `HTTP error! status: ${response.status}${errorText ? ` - ${errorText}` : ''}`
+          );
         }
 
         const reader = response.body?.getReader();
