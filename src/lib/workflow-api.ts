@@ -28,6 +28,16 @@ function buildWorkflowUrl(path: string): string {
   return url.toString();
 }
 
+function redactSensitiveRequest<T>(request: T): T {
+  return JSON.parse(JSON.stringify(request, (key, value) => {
+    if (['access_token', 'ssh_private_key'].includes(key)) {
+      return value ? '[redacted]' : value;
+    }
+
+    return value;
+  })) as T;
+}
+
 export class WorkflowAPIClient {
   /**
    * Trigger a workflow execution with SSE streaming
@@ -83,7 +93,7 @@ export class WorkflowAPIClient {
     const controller = new AbortController();
     
     console.log('[WorkflowAPI] Starting SSE connection to:', url);
-    console.log('[WorkflowAPI] Request:', request);
+    console.log('[WorkflowAPI] Request:', redactSensitiveRequest(request));
     
     fetch(url, {
       method: 'POST',

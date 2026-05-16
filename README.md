@@ -8,6 +8,7 @@ Agentic Orchestrator is a hackathon-ready security automation dashboard built wi
 - Signed HttpOnly session cookie authentication
 - Vulnerability and pull request tabs with repository-level grouping
 - Repository remediation workflow using the backend SSE workflow API
+- Public and private repository connection options
 - Infrastructure scan workflow with two modes:
   - Repository IaC scan
   - Kubernetes cluster scan
@@ -97,6 +98,15 @@ The existing repository workflow is preserved. It triggers the configured workfl
 - Remediation
 - Validation
 - Pull request creation
+
+Repository targets can be marked as public or private. Private repository connection options include:
+
+- Git provider
+- Secret reference
+- Personal access token
+- GitHub App installation ID
+- SSH deploy key
+- Username or organization owner
 
 ### Infrastructure Scan
 

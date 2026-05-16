@@ -5,12 +5,26 @@ export interface WorkflowTriggerRequest {
   repo_url: string;
   branch?: string;
   triggered_by?: string;
+  repository_access?: 'public' | 'private';
+  private_repository?: PrivateRepositoryConnection;
 }
 
 export interface WorkflowRepositoryRequest {
   repo_url: string;
   branch?: string;
   commit_sha?: string;
+  repository_access?: 'public' | 'private';
+  private_repository?: PrivateRepositoryConnection;
+}
+
+export interface PrivateRepositoryConnection {
+  provider?: string;
+  auth_method?: string;
+  username?: string;
+  credential_reference?: string;
+  installation_id?: string;
+  access_token?: string;
+  ssh_private_key?: string;
 }
 
 export interface WorkflowBatchTriggerRequest {

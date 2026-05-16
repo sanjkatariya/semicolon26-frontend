@@ -8,6 +8,9 @@ import { WorkflowEvent, WorkflowRepositoryRequest } from '@/types/workflow-execu
 import WorkflowCard from '@/components/WorkflowCard';
 import { rememberAgentResult } from '@/lib/workflow-memory';
 
+type RepositoryAccess = 'public' | 'private';
+type PrivateRepoAuthMethod = 'credential_reference' | 'personal_access_token' | 'github_app' | 'ssh_deploy_key';
+
 interface ExecutionStep {
   id: number;
   name: string;
@@ -41,6 +44,14 @@ interface RepositoryInput {
   id: string;
   repo_url: string;
   branch: string;
+  repository_access: RepositoryAccess;
+  auth_provider: string;
+  auth_method: PrivateRepoAuthMethod;
+  credential_reference: string;
+  username: string;
+  installation_id: string;
+  access_token: string;
+  ssh_private_key: string;
 }
 
 type InfrastructureTargetType = 'repo' | 'kubernetes_cluster';
@@ -87,8 +98,89 @@ function createRepositoryInput(repoUrl = '', branch = DEFAULT_BRANCH): Repositor
     id: generateInputId(),
     repo_url: repoUrl,
     branch,
+    repository_access: 'public',
+    auth_provider: 'github',
+    auth_method: 'credential_reference',
+    credential_reference: '',
+    username: '',
+    installation_id: '',
+    access_token: '',
+    ssh_private_key: '',
   };
 }
+
+function getPrivateRepoConnection(
+  input: Pick<
+    RepositoryInput,
+    | 'repository_access'
+    | 'auth_provider'
+    | 'auth_method'
+    | 'credential_reference'
+    | 'username'
+    | 'installation_id'
+    | 'access_token'
+    | 'ssh_private_key'
+  >,
+  includeSecrets = true
+) {
+  if (input.repository_access !== 'private') {
+    return undefined;
+  }
+
+  return {
+    provider: input.auth_provider,
+    auth_method: input.auth_method,
+    username: input.username.trim() || undefined,
+    credential_reference: input.credential_reference.trim() || undefined,
+    installation_id: input.installation_id.trim() || undefined,
+    access_token: includeSecrets ? input.access_token.trim() || undefined : undefined,
+    ssh_private_key: includeSecrets ? input.ssh_private_key.trim() || undefined : undefined,
+  };
+}
+
+function validatePrivateRepoConnection(label: string, input: RepositoryInput | typeof defaultPrivateRepoFields) {
+  if (input.repository_access !== 'private') {
+    return true;
+  }
+
+  const hasCredentialReference = Boolean(input.credential_reference.trim());
+  const hasAccessToken = Boolean('access_token' in input && input.access_token.trim());
+  const hasSshKey = Boolean('ssh_private_key' in input && input.ssh_private_key.trim());
+  const hasInstallationId = Boolean(input.installation_id.trim());
+
+  if (input.auth_method === 'credential_reference' && !hasCredentialReference) {
+    alert(`${label} needs a credential reference for private access.`);
+    return false;
+  }
+
+  if (input.auth_method === 'personal_access_token' && !hasCredentialReference && !hasAccessToken) {
+    alert(`${label} needs a token or credential reference for private access.`);
+    return false;
+  }
+
+  if (input.auth_method === 'github_app' && (!hasInstallationId || !hasCredentialReference)) {
+    alert(`${label} needs GitHub App installation ID and credential reference.`);
+    return false;
+  }
+
+  if (input.auth_method === 'ssh_deploy_key' && !hasCredentialReference && !hasSshKey) {
+    alert(`${label} needs an SSH deploy key or credential reference.`);
+    return false;
+  }
+
+  return true;
+}
+
+const defaultPrivateRepoFields = {
+  repository_access: 'public' as RepositoryAccess,
+  auth_provider: 'github',
+  auth_method: 'credential_reference' as PrivateRepoAuthMethod,
+  credential_reference: '',
+  username: '',
+  installation_id: '',
+  access_token: '',
+  ssh_private_key: '',
+};
 
 function cloneSteps(steps: ExecutionStep[]): ExecutionStep[] {
   return steps.map(step => ({
@@ -119,6 +211,166 @@ function getBatchSummary(event: WorkflowEvent) {
   return 'summary' in event && event.summary ? event.summary : undefined;
 }
 
+interface RepositoryAccessFieldsProps {
+  access: RepositoryAccess;
+  provider: string;
+  authMethod: PrivateRepoAuthMethod;
+  credentialReference: string;
+  username: string;
+  installationId: string;
+  accessToken: string;
+  sshPrivateKey: string;
+  onChange: (changes: {
+    repository_access?: RepositoryAccess;
+    auth_provider?: string;
+    auth_method?: PrivateRepoAuthMethod;
+    credential_reference?: string;
+    username?: string;
+    installation_id?: string;
+    access_token?: string;
+    ssh_private_key?: string;
+  }) => void;
+}
+
+function RepositoryAccessFields({
+  access,
+  provider,
+  authMethod,
+  credentialReference,
+  username,
+  installationId,
+  accessToken,
+  sshPrivateKey,
+  onChange,
+}: RepositoryAccessFieldsProps) {
+  const isPrivate = access === 'private';
+
+  return (
+    <div className="space-y-4 rounded-lg border border-gray-700 bg-gray-900/70 p-4">
+      <div>
+        <div className="mb-2 text-sm font-medium text-gray-300">Repository visibility</div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {(['public', 'private'] as RepositoryAccess[]).map(option => (
+            <label
+              key={option}
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 text-sm transition-all ${
+                access === option
+                  ? 'border-purple-500 bg-purple-500/15 text-white'
+                  : 'border-gray-700 bg-gray-950 text-gray-300 hover:border-gray-500'
+              }`}
+            >
+              <input
+                type="radio"
+                checked={access === option}
+                onChange={() => onChange({ repository_access: option })}
+                className="h-4 w-4"
+              />
+              <span className="capitalize">{option}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {isPrivate && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-300">Git provider</label>
+              <select
+                value={provider}
+                onChange={(event) => onChange({ auth_provider: event.target.value })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="github">GitHub</option>
+                <option value="gitlab">GitLab</option>
+                <option value="bitbucket">Bitbucket</option>
+                <option value="azure_devops">Azure DevOps</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-300">Auth method</label>
+              <select
+                value={authMethod}
+                onChange={(event) => onChange({ auth_method: event.target.value as PrivateRepoAuthMethod })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="credential_reference">Secret reference</option>
+                <option value="personal_access_token">Personal access token</option>
+                <option value="github_app">GitHub App</option>
+                <option value="ssh_deploy_key">SSH deploy key</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-300">Credential reference</label>
+              <input
+                type="text"
+                value={credentialReference}
+                onChange={(event) => onChange({ credential_reference: event.target.value })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                placeholder="vault/github/prod-readonly"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-300">Username or owner</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(event) => onChange({ username: event.target.value })}
+                className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                placeholder="org or service account"
+              />
+            </div>
+            {authMethod === 'github_app' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-300">Installation ID</label>
+                <input
+                  type="text"
+                  value={installationId}
+                  onChange={(event) => onChange({ installation_id: event.target.value })}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                  placeholder="12345678"
+                />
+              </div>
+            )}
+            {authMethod === 'personal_access_token' && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-300">Access token</label>
+                <input
+                  type="password"
+                  value={accessToken}
+                  onChange={(event) => onChange({ access_token: event.target.value })}
+                  className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                  placeholder="Paste token or use credential reference"
+                />
+              </div>
+            )}
+          </div>
+
+          {authMethod === 'ssh_deploy_key' && (
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-300">SSH private key</label>
+              <textarea
+                value={sshPrivateKey}
+                onChange={(event) => onChange({ ssh_private_key: event.target.value })}
+                className="min-h-24 w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                placeholder="Use a credential reference when possible"
+              />
+            </div>
+          )}
+
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-xs leading-5 text-blue-100">
+            For private repositories, a read-only token, GitHub App installation, SSH deploy key, or secret-manager credential reference is required. Secrets are not shown in workflow cards.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ExecuteWorkflowPage() {
   const router = useRouter();
   const batchStreamRef = useRef<EventSource | null>(null);
@@ -139,10 +391,26 @@ export default function ExecuteWorkflowPage() {
     repo_url: ENABLE_MOCK_DATA ? 'https://github.com/kim815/vulnerable-repo' : '',
     branch: ENABLE_MOCK_DATA ? DEFAULT_BRANCH : '',
     triggered_by: DEFAULT_TRIGGERED_BY,
+    repo_repository_access: 'public' as RepositoryAccess,
+    repo_auth_provider: 'github',
+    repo_auth_method: 'credential_reference' as PrivateRepoAuthMethod,
+    repo_credential_reference: '',
+    repo_username: '',
+    repo_installation_id: '',
+    repo_access_token: '',
+    repo_ssh_private_key: '',
     infrastructure_target: 'kubernetes_cluster' as InfrastructureTargetType,
     iac_repo_url: 'https://github.com/company/infrastructure',
     iac_branch: DEFAULT_BRANCH,
     iac_path: 'k8s/overlays/prod',
+    iac_repository_access: 'public' as RepositoryAccess,
+    iac_auth_provider: 'github',
+    iac_auth_method: 'credential_reference' as PrivateRepoAuthMethod,
+    iac_credential_reference: '',
+    iac_username: '',
+    iac_installation_id: '',
+    iac_access_token: '',
+    iac_ssh_private_key: '',
     cluster_name: 'prod-eks-us-east-1',
     kubeconfig_context: 'prod-admin',
     namespace: 'all-namespaces',
@@ -199,10 +467,19 @@ export default function ExecuteWorkflowPage() {
       return null;
     }
 
+    const invalidPrivateIndex = repositoryInputs.findIndex((input, index) =>
+      !validatePrivateRepoConnection(`Repository ${index + 1}`, input)
+    );
+    if (invalidPrivateIndex !== -1) {
+      return null;
+    }
+
     const targets = repositoryInputs.map(input => ({
       repo_url: input.repo_url.trim(),
       branch: input.branch.trim() || DEFAULT_BRANCH,
       commit_sha: 'HEAD',
+      repository_access: input.repository_access,
+      private_repository: getPrivateRepoConnection(input),
     }));
     const duplicateUrl = targets.find((target, index) =>
       targets.findIndex(candidate => candidate.repo_url === target.repo_url) !== index
@@ -215,6 +492,28 @@ export default function ExecuteWorkflowPage() {
 
     return targets;
   };
+
+  const getSingleRepoConnection = (includeSecrets = true) => getPrivateRepoConnection({
+    repository_access: formData.repo_repository_access,
+    auth_provider: formData.repo_auth_provider,
+    auth_method: formData.repo_auth_method,
+    credential_reference: formData.repo_credential_reference,
+    username: formData.repo_username,
+    installation_id: formData.repo_installation_id,
+    access_token: formData.repo_access_token,
+    ssh_private_key: formData.repo_ssh_private_key,
+  }, includeSecrets);
+
+  const getIacRepoConnection = (includeSecrets = true) => getPrivateRepoConnection({
+    repository_access: formData.iac_repository_access,
+    auth_provider: formData.iac_auth_provider,
+    auth_method: formData.iac_auth_method,
+    credential_reference: formData.iac_credential_reference,
+    username: formData.iac_username,
+    installation_id: formData.iac_installation_id,
+    access_token: formData.iac_access_token,
+    ssh_private_key: formData.iac_ssh_private_key,
+  }, includeSecrets);
 
   const getInfrastructureTargetLabel = () => {
     if (formData.infrastructure_target === 'repo') {
@@ -239,6 +538,8 @@ export default function ExecuteWorkflowPage() {
         repository_url: formData.iac_repo_url,
         branch: formData.iac_branch,
         manifest_path: formData.iac_path,
+        repository_access: formData.iac_repository_access,
+        private_repository: getIacRepoConnection(false),
         severity_levels: formData.severity_levels.split(',').map(item => item.trim()).filter(Boolean),
         compliance_profile: formData.compliance_profile,
       };
@@ -330,7 +631,11 @@ export default function ExecuteWorkflowPage() {
               status: 'running',
               startTime: event.timestamp,
               progress: 50,
-              input: { repository_url: target.repo_url, branch: target.branch || DEFAULT_BRANCH },
+              input: {
+                repository_url: target.repo_url,
+                branch: target.branch || DEFAULT_BRANCH,
+                repository_access: target.repository_access || 'public',
+              },
             };
           } else if (event.status === 'completed') {
             const startTime = updatedSteps[agentIndex].startTime;
@@ -498,9 +803,12 @@ export default function ExecuteWorkflowPage() {
   };
 
   const executeWorkflow = async (workflowId: string, workflow: WorkflowInstance) => {
+    const privateRepository = getSingleRepoConnection();
     const target = {
       repo_url: workflow.repoUrl,
       branch: workflow.branch || DEFAULT_BRANCH,
+      repository_access: formData.repo_repository_access,
+      private_repository: privateRepository,
     };
 
     setWorkflows(prev => prev.map(wf =>
@@ -513,6 +821,8 @@ export default function ExecuteWorkflowPage() {
           repo_url: workflow.repoUrl,
           branch: workflow.branch,
           triggered_by: workflow.triggeredBy,
+          repository_access: formData.repo_repository_access,
+          private_repository: privateRepository,
         },
         (event: WorkflowEvent) => {
           console.log(`[${workflowId}] Event received:`, event);
@@ -546,9 +856,43 @@ export default function ExecuteWorkflowPage() {
       return;
     }
 
+    if (
+      formData.workflow_type === 'repo_remediation' &&
+      !validatePrivateRepoConnection('Repository workflow', {
+        ...defaultPrivateRepoFields,
+        repository_access: formData.repo_repository_access,
+        auth_provider: formData.repo_auth_provider,
+        auth_method: formData.repo_auth_method,
+        credential_reference: formData.repo_credential_reference,
+        username: formData.repo_username,
+        installation_id: formData.repo_installation_id,
+        access_token: formData.repo_access_token,
+        ssh_private_key: formData.repo_ssh_private_key,
+      })
+    ) {
+      return;
+    }
+
     if (formData.workflow_type === 'infrastructure_scan') {
       if (formData.infrastructure_target === 'repo' && !formData.iac_repo_url.trim()) {
         alert('Please enter an infrastructure repository URL');
+        return;
+      }
+
+      if (
+        formData.infrastructure_target === 'repo' &&
+        !validatePrivateRepoConnection('Infrastructure repository', {
+          ...defaultPrivateRepoFields,
+          repository_access: formData.iac_repository_access,
+          auth_provider: formData.iac_auth_provider,
+          auth_method: formData.iac_auth_method,
+          credential_reference: formData.iac_credential_reference,
+          username: formData.iac_username,
+          installation_id: formData.iac_installation_id,
+          access_token: formData.iac_access_token,
+          ssh_private_key: formData.iac_ssh_private_key,
+        })
+      ) {
         return;
       }
 
@@ -835,43 +1179,66 @@ export default function ExecuteWorkflowPage() {
             </div>
 
             {formData.workflow_type === 'repo_remediation' ? (
-              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Repository URL *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.repo_url}
-                    onChange={(e) => setFormData({ ...formData, repo_url: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://github.com/user/repo"
-                  />
+              <div className="mb-4 space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Repository URL *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.repo_url}
+                      onChange={(e) => setFormData({ ...formData, repo_url: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://github.com/user/repo"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.branch}
+                      onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="main"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Triggered By
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.triggered_by}
+                      onChange={(e) => setFormData({ ...formData, triggered_by: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="ui"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.branch}
-                    onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="main"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Triggered By
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.triggered_by}
-                    onChange={(e) => setFormData({ ...formData, triggered_by: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="ui"
-                  />
-                </div>
+                <RepositoryAccessFields
+                  access={formData.repo_repository_access}
+                  provider={formData.repo_auth_provider}
+                  authMethod={formData.repo_auth_method}
+                  credentialReference={formData.repo_credential_reference}
+                  username={formData.repo_username}
+                  installationId={formData.repo_installation_id}
+                  accessToken={formData.repo_access_token}
+                  sshPrivateKey={formData.repo_ssh_private_key}
+                  onChange={(changes) => setFormData({
+                    ...formData,
+                    repo_repository_access: changes.repository_access ?? formData.repo_repository_access,
+                    repo_auth_provider: changes.auth_provider ?? formData.repo_auth_provider,
+                    repo_auth_method: changes.auth_method ?? formData.repo_auth_method,
+                    repo_credential_reference: changes.credential_reference ?? formData.repo_credential_reference,
+                    repo_username: changes.username ?? formData.repo_username,
+                    repo_installation_id: changes.installation_id ?? formData.repo_installation_id,
+                    repo_access_token: changes.access_token ?? formData.repo_access_token,
+                    repo_ssh_private_key: changes.ssh_private_key ?? formData.repo_ssh_private_key,
+                  })}
+                />
               </div>
             ) : (
               <div className="mb-4 space-y-5">
@@ -903,37 +1270,60 @@ export default function ExecuteWorkflowPage() {
                 </div>
 
                 {formData.infrastructure_target === 'repo' ? (
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">Infrastructure Repo URL *</label>
-                      <input
-                        type="text"
-                        value={formData.iac_repo_url}
-                        onChange={(e) => setFormData({ ...formData, iac_repo_url: e.target.value })}
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://github.com/company/infrastructure"
-                      />
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-300">Infrastructure Repo URL *</label>
+                        <input
+                          type="text"
+                          value={formData.iac_repo_url}
+                          onChange={(e) => setFormData({ ...formData, iac_repo_url: e.target.value })}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          placeholder="https://github.com/company/infrastructure"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-300">Branch</label>
+                        <input
+                          type="text"
+                          value={formData.iac_branch}
+                          onChange={(e) => setFormData({ ...formData, iac_branch: e.target.value })}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          placeholder="main"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-gray-300">Manifest or IaC Path</label>
+                        <input
+                          type="text"
+                          value={formData.iac_path}
+                          onChange={(e) => setFormData({ ...formData, iac_path: e.target.value })}
+                          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
+                          placeholder="k8s/overlays/prod"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">Branch</label>
-                      <input
-                        type="text"
-                        value={formData.iac_branch}
-                        onChange={(e) => setFormData({ ...formData, iac_branch: e.target.value })}
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                        placeholder="main"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-2 block text-sm font-medium text-gray-300">Manifest or IaC Path</label>
-                      <input
-                        type="text"
-                        value={formData.iac_path}
-                        onChange={(e) => setFormData({ ...formData, iac_path: e.target.value })}
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 outline-none transition focus:border-transparent focus:ring-2 focus:ring-blue-500"
-                        placeholder="k8s/overlays/prod"
-                      />
-                    </div>
+                    <RepositoryAccessFields
+                      access={formData.iac_repository_access}
+                      provider={formData.iac_auth_provider}
+                      authMethod={formData.iac_auth_method}
+                      credentialReference={formData.iac_credential_reference}
+                      username={formData.iac_username}
+                      installationId={formData.iac_installation_id}
+                      accessToken={formData.iac_access_token}
+                      sshPrivateKey={formData.iac_ssh_private_key}
+                      onChange={(changes) => setFormData({
+                        ...formData,
+                        iac_repository_access: changes.repository_access ?? formData.iac_repository_access,
+                        iac_auth_provider: changes.auth_provider ?? formData.iac_auth_provider,
+                        iac_auth_method: changes.auth_method ?? formData.iac_auth_method,
+                        iac_credential_reference: changes.credential_reference ?? formData.iac_credential_reference,
+                        iac_username: changes.username ?? formData.iac_username,
+                        iac_installation_id: changes.installation_id ?? formData.iac_installation_id,
+                        iac_access_token: changes.access_token ?? formData.iac_access_token,
+                        iac_ssh_private_key: changes.ssh_private_key ?? formData.iac_ssh_private_key,
+                      })}
+                    />
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -1109,42 +1499,55 @@ export default function ExecuteWorkflowPage() {
             {repositoryInputs.map((input, index) => (
               <div
                 key={input.id}
-                className="grid grid-cols-1 gap-3 rounded-lg border border-gray-700 bg-gray-900/70 p-4 md:grid-cols-[minmax(0,1fr)_180px_44px]"
+                className="space-y-4 rounded-lg border border-gray-700 bg-gray-900/70 p-4"
               >
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Repository URL {index + 1}
-                  </label>
-                  <input
-                    type="text"
-                    value={input.repo_url}
-                    onChange={(e) => updateRepositoryInput(input.id, { repo_url: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://github.com/user/repo"
-                  />
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_180px_44px]">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Repository URL {index + 1}
+                    </label>
+                    <input
+                      type="text"
+                      value={input.repo_url}
+                      onChange={(e) => updateRepositoryInput(input.id, { repo_url: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://github.com/user/repo"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Branch
+                    </label>
+                    <input
+                      type="text"
+                      value={input.branch}
+                      onChange={(e) => updateRepositoryInput(input.id, { branch: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="main"
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => removeRepositoryInput(input.id)}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-red-600 hover:text-white"
+                      aria-label={`Remove repository ${index + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={input.branch}
-                    onChange={(e) => updateRepositoryInput(input.id, { branch: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="main"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() => removeRepositoryInput(input.id)}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-red-600 hover:text-white"
-                    aria-label={`Remove repository ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                <RepositoryAccessFields
+                  access={input.repository_access}
+                  provider={input.auth_provider}
+                  authMethod={input.auth_method}
+                  credentialReference={input.credential_reference}
+                  username={input.username}
+                  installationId={input.installation_id}
+                  accessToken={input.access_token}
+                  sshPrivateKey={input.ssh_private_key}
+                  onChange={(changes) => updateRepositoryInput(input.id, changes)}
+                />
               </div>
             ))}
           </div>
