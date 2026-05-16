@@ -1,0 +1,10 @@
+{
+  "/api/v1/agents/configurations/[agentId]/input-form/route": "app/api/v1/agents/configurations/[agentId]/input-form/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/workflows/page": "app/workflows/page.js",
+  "/workflows/execute/page": "app/workflows/execute/page.js",
+  "/workflows/create/page": "app/workflows/create/page.js",
+  "/agents/page": "app/agents/page.js",
+  "/agent-config-demo/page": "app/agent-config-demo/page.js",
+  "/workflows/[id]/page": "app/workflows/[id]/page.js"
+}

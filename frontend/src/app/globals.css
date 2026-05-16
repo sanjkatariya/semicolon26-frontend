@@ -1,0 +1,325 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-secondary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-md;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+/* Security platform specific styles */
+.severity-critical {
+  @apply bg-critical/10 text-critical border-critical/20;
+}
+
+.severity-high {
+  @apply bg-high/10 text-high border-high/20;
+}
+
+.severity-medium {
+  @apply bg-medium/10 text-medium border-medium/20;
+}
+
+.severity-low {
+  @apply bg-low/10 text-low border-low/20;
+}
+
+.severity-info {
+  @apply bg-info/10 text-info border-info/20;
+}
+
+/* Status indicators */
+.status-active {
+  @apply bg-success/10 text-success border-success/20;
+}
+
+.status-inactive {
+  @apply bg-muted text-muted-foreground border-muted;
+}
+
+.status-error {
+  @apply bg-error/10 text-error border-error/20;
+}
+
+.status-warning {
+  @apply bg-warning/10 text-warning border-warning/20;
+}
+
+/* Pulse animation for live indicators */
+.pulse-dot {
+  @apply relative inline-flex h-3 w-3 rounded-full;
+}
+
+.pulse-dot::before {
+  content: '';
+  @apply absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping;
+}
+
+/* Code block styling */
+.code-block {
+  @apply bg-muted rounded-lg p-4 overflow-x-auto;
+}
+
+.code-block code {
+  @apply font-mono text-sm;
+}
+
+/* Dashboard grid */
+.dashboard-grid {
+  @apply grid gap-4 md:gap-6 lg:gap-8;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+/* Metric card */
+.metric-card {
+  @apply rounded-lg border bg-card p-6 shadow-sm transition-all hover:shadow-md;
+}
+
+/* Chart container */
+.chart-container {
+  @apply w-full h-[300px] md:h-[400px];
+}
+
+/* Table styles */
+.data-table {
+  @apply w-full border-collapse;
+}
+
+.data-table th {
+  @apply bg-muted px-4 py-3 text-left text-sm font-semibold;
+}
+
+.data-table td {
+  @apply border-t px-4 py-3 text-sm;
+}
+
+.data-table tr:hover {
+  @apply bg-muted/50;
+}
+
+/* Loading skeleton */
+.skeleton {
+  @apply animate-pulse bg-muted rounded;
+}
+
+/* Gradient backgrounds */
+.gradient-primary {
+  background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.7) 100%);
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+}
+
+.gradient-error {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+}
+
+/* Glass morphism effect */
+.glass {
+  @apply backdrop-blur-md bg-background/80 border border-border/50;
+}
+
+/* Cyber security theme accents */
+.cyber-border {
+  @apply relative;
+}
+
+.cyber-border::before {
+  content: '';
+  @apply absolute inset-0 rounded-lg;
+  background: linear-gradient(45deg, transparent 30%, hsl(var(--primary) / 0.1) 50%, transparent 70%);
+  animation: cyber-scan 3s linear infinite;
+}
+
+@keyframes cyber-scan {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Terminal/Console styling */
+.terminal {
+  @apply bg-black text-green-400 font-mono text-sm p-4 rounded-lg overflow-auto;
+}
+
+.terminal-line {
+  @apply mb-1;
+}
+
+.terminal-prompt {
+  @apply text-green-500 mr-2;
+}
+
+/* Workflow canvas */
+.workflow-canvas {
+  @apply bg-muted/30 rounded-lg border-2 border-dashed border-border;
+}
+
+/* Agent status indicator */
+.agent-status {
+  @apply inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium;
+}
+
+/* Vulnerability badge */
+.vuln-badge {
+  @apply inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold;
+}
+
+/* Timeline styles */
+.timeline {
+  @apply relative border-l-2 border-border pl-6 ml-3;
+}
+
+.timeline-item {
+  @apply relative mb-6;
+}
+
+.timeline-item::before {
+  content: '';
+  @apply absolute -left-[1.6rem] top-1 w-3 h-3 rounded-full bg-primary border-2 border-background;
+}
+
+/* Notification styles */
+.notification {
+  @apply rounded-lg border p-4 shadow-lg animate-slide-in-from-right;
+}
+
+/* Modal overlay */
+.modal-overlay {
+  @apply fixed inset-0 bg-black/50 backdrop-blur-sm z-50;
+}
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container {
+    @apply h-[250px];
+  }
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    @apply bg-white text-black;
+  }
+}
+
+/* Accessibility */
+.focus-visible {
+  @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --border: 0 0% 20%;
+  }
+  
+  .dark {
+    --border: 0 0% 80%;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Made with Bob */

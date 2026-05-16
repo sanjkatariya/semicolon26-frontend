@@ -1,0 +1,100 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape logs from all microservices
+  - job_name: microservices
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: microservices
+          __path__: /var/log/agentic-orchestrator/*.log
+
+  # API Gateway logs
+  - job_name: api-gateway
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: api-gateway
+          service: api-gateway
+          __path__: /var/log/agentic-orchestrator/api-gateway/*.log
+
+  # Identity Service logs
+  - job_name: identity-service
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: identity-service
+          service: identity-service
+          __path__: /var/log/agentic-orchestrator/identity-service/*.log
+
+  # Agent Registry logs
+  - job_name: agent-registry
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: agent-registry
+          service: agent-registry
+          __path__: /var/log/agentic-orchestrator/agent-registry/*.log
+
+  # Workflow Orchestrator logs
+  - job_name: workflow-orchestrator
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: workflow-orchestrator
+          service: workflow-orchestrator
+          __path__: /var/log/agentic-orchestrator/workflow-orchestrator/*.log
+
+  # Vulnerability services logs
+  - job_name: vulnerability-services
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: vulnerability-services
+          service: vulnerability
+          __path__: /var/log/agentic-orchestrator/vulnerability-*/*.log
+
+  # Remediation Engine logs
+  - job_name: remediation-engine
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: remediation-engine
+          service: remediation-engine
+          __path__: /var/log/agentic-orchestrator/remediation-engine/*.log
+
+  # Git Integration logs
+  - job_name: git-integration
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: git-integration
+          service: git-integration
+          __path__: /var/log/agentic-orchestrator/git-integration/*.log
+
+  # System logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/*.log
+
+# Made with Bob

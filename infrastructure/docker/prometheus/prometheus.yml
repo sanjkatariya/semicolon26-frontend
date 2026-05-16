@@ -1,0 +1,135 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'agentic-orchestrator'
+    environment: 'development'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+
+  # Identity Service
+  - job_name: 'identity-service'
+    static_configs:
+      - targets: ['host.docker.internal:8001']
+    metrics_path: '/metrics'
+
+  # Agent Registry Service
+  - job_name: 'agent-registry'
+    static_configs:
+      - targets: ['host.docker.internal:8002']
+    metrics_path: '/metrics'
+
+  # Workflow Orchestrator
+  - job_name: 'workflow-orchestrator'
+    static_configs:
+      - targets: ['host.docker.internal:8003']
+    metrics_path: '/metrics'
+
+  # Vulnerability Aggregation Service
+  - job_name: 'vulnerability-aggregation'
+    static_configs:
+      - targets: ['host.docker.internal:8004']
+    metrics_path: '/metrics'
+
+  # Vulnerability Normalization Service
+  - job_name: 'vulnerability-normalization'
+    static_configs:
+      - targets: ['host.docker.internal:8005']
+    metrics_path: '/metrics'
+
+  # Remediation Engine
+  - job_name: 'remediation-engine'
+    static_configs:
+      - targets: ['host.docker.internal:8006']
+    metrics_path: '/metrics'
+
+  # Git Integration Service
+  - job_name: 'git-integration'
+    static_configs:
+      - targets: ['host.docker.internal:8007']
+    metrics_path: '/metrics'
+
+  # Pull Request Automation Service
+  - job_name: 'pr-automation'
+    static_configs:
+      - targets: ['host.docker.internal:8008']
+    metrics_path: '/metrics'
+
+  # Compliance Engine
+  - job_name: 'compliance-engine'
+    static_configs:
+      - targets: ['host.docker.internal:8009']
+    metrics_path: '/metrics'
+
+  # Notification Service
+  - job_name: 'notification-service'
+    static_configs:
+      - targets: ['host.docker.internal:8010']
+    metrics_path: '/metrics'
+
+  # Audit Logging Service
+  - job_name: 'audit-logging'
+    static_configs:
+      - targets: ['host.docker.internal:8011']
+    metrics_path: '/metrics'
+
+  # Dashboard API Service
+  - job_name: 'dashboard-api'
+    static_configs:
+      - targets: ['host.docker.internal:8012']
+    metrics_path: '/metrics'
+
+  # Agent Runtime Service
+  - job_name: 'agent-runtime'
+    static_configs:
+      - targets: ['host.docker.internal:8013']
+    metrics_path: '/metrics'
+
+  # Policy Engine
+  - job_name: 'policy-engine'
+    static_configs:
+      - targets: ['host.docker.internal:8014']
+    metrics_path: '/metrics'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Redis Exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+
+  # Kafka Exporter
+  - job_name: 'kafka'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+
+  # Node Exporter (for host metrics)
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+
+# Made with Bob
