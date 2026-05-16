@@ -41,8 +41,11 @@ interface RepositoryInput {
   id: string;
   repo_url: string;
   branch: string;
+  repo_visibility: RepositoryVisibility;
+  secret_token: string;
 }
 
+type RepositoryVisibility = 'public' | 'private';
 type InfrastructureTargetType = 'repo' | 'kubernetes_cluster';
 
 const initialSteps: ExecutionStep[] = [
@@ -82,11 +85,17 @@ function generateWorkflowId(index?: number) {
   return `wf_${Date.now()}_${indexPart}${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createRepositoryInput(repoUrl = '', branch = DEFAULT_BRANCH): RepositoryInput {
+function createRepositoryInput(
+  repoUrl = '',
+  branch = DEFAULT_BRANCH,
+  id = generateInputId()
+): RepositoryInput {
   return {
-    id: generateInputId(),
+    id,
     repo_url: repoUrl,
     branch,
+    repo_visibility: 'public',
+    secret_token: '',
   };
 }
 
@@ -123,10 +132,11 @@ export default function ExecuteWorkflowPage() {
   const router = useRouter();
   const batchStreamRef = useRef<EventSource | null>(null);
   const [workflows, setWorkflows] = useState<WorkflowInstance[]>([]);
-  const [repositoryInputs, setRepositoryInputs] = useState<RepositoryInput[]>([
+  const [repositoryInputs, setRepositoryInputs] = useState<RepositoryInput[]>(() => [
     createRepositoryInput(
       ENABLE_MOCK_DATA ? 'https://github.com/kim815/vulnerable-repo' : '',
-      DEFAULT_BRANCH
+      DEFAULT_BRANCH,
+      'repo_initial'
     ),
   ]);
   const [isTriggering, setIsTriggering] = useState(false);
@@ -199,10 +209,24 @@ export default function ExecuteWorkflowPage() {
       return null;
     }
 
+    const missingTokenIndex = repositoryInputs.findIndex(input =>
+      input.repo_visibility === 'private' && !input.secret_token.trim()
+    );
+    if (missingTokenIndex !== -1) {
+      alert(`Repository ${missingTokenIndex + 1} needs a secret token for private access.`);
+      return null;
+    }
+
     const targets = repositoryInputs.map(input => ({
       repo_url: input.repo_url.trim(),
-      branch: input.branch.trim() || DEFAULT_BRANCH,
+      branch: DEFAULT_BRANCH,
       commit_sha: 'HEAD',
+      ...(input.repo_visibility === 'private'
+        ? {
+            repo_visibility: input.repo_visibility,
+            secret_token: input.secret_token.trim(),
+          }
+        : {}),
     }));
     const duplicateUrl = targets.find((target, index) =>
       targets.findIndex(candidate => candidate.repo_url === target.repo_url) !== index
@@ -804,6 +828,19 @@ export default function ExecuteWorkflowPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-6 py-8">
+        {workflows.length === 0 && (
+          <div className="mb-6 rounded-lg border border-purple-500/30 bg-gradient-to-r from-gray-800/80 via-purple-500/10 to-gray-800/80 px-5 py-4 shadow-lg shadow-purple-950/20 backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-200">
+                <Play className="h-5 w-5" />
+              </div>
+              <p className="text-sm text-gray-200">
+                Start a single workflow, infrastructure scan, or repository batch to begin live tracking.
+              </p>
+            </div>
+          </div>
+        )}
+
         {showAddForm && (
           <section className="mb-6 rounded-lg border border-gray-700 bg-gray-800/50 p-6 backdrop-blur-sm">
             <h2 className="mb-4 text-xl font-semibold">New Workflow</h2>
@@ -1109,42 +1146,101 @@ export default function ExecuteWorkflowPage() {
             {repositoryInputs.map((input, index) => (
               <div
                 key={input.id}
-                className="grid grid-cols-1 gap-3 rounded-lg border border-gray-700 bg-gray-900/70 p-4 md:grid-cols-[minmax(0,1fr)_180px_44px]"
+                className="rounded-lg border border-gray-700 bg-gray-900/70 p-4"
               >
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Repository URL {index + 1}
-                  </label>
-                  <input
-                    type="text"
-                    value={input.repo_url}
-                    onChange={(e) => updateRepositoryInput(input.id, { repo_url: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="https://github.com/user/repo"
-                  />
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_140px_220px_44px]">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Repository URL {index + 1}
+                    </label>
+                    <input
+                      type="text"
+                      value={input.repo_url}
+                      onChange={(e) => updateRepositoryInput(input.id, { repo_url: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="https://github.com/user/repo"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Branch
+                    </label>
+                    <select
+                      value={input.branch || DEFAULT_BRANCH}
+                      onChange={(e) => updateRepositoryInput(input.id, { branch: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                    >
+                      <option value={DEFAULT_BRANCH}>main</option>
+                    </select>
+                  </div>
+                  <fieldset>
+                    <legend className="mb-2 block text-sm font-medium text-gray-300">
+                      Access
+                    </legend>
+                    <div className="inline-flex h-10 w-full rounded-lg border border-gray-700 bg-gray-950 p-1">
+                      <label
+                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
+                          input.repo_visibility === 'public'
+                            ? 'bg-purple-500 text-white'
+                            : 'text-gray-400 hover:text-gray-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`repository-access-${input.id}`}
+                          value="public"
+                          checked={input.repo_visibility === 'public'}
+                          onChange={() => updateRepositoryInput(input.id, { repo_visibility: 'public', secret_token: '' })}
+                          className="sr-only"
+                        />
+                        Public
+                      </label>
+                      <label
+                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-md px-2 text-xs font-semibold transition-colors ${
+                          input.repo_visibility === 'private'
+                            ? 'bg-purple-500 text-white'
+                            : 'text-gray-400 hover:text-gray-200'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`repository-access-${input.id}`}
+                          value="private"
+                          checked={input.repo_visibility === 'private'}
+                          onChange={() => updateRepositoryInput(input.id, { repo_visibility: 'private' })}
+                          className="sr-only"
+                        />
+                        Private
+                      </label>
+                    </div>
+                  </fieldset>
+                  <div className="flex items-end">
+                    <button
+                      type="button"
+                      onClick={() => removeRepositoryInput(input.id)}
+                      className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-red-600 hover:text-white"
+                      aria-label={`Remove repository ${index + 1}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-300">
-                    Branch
-                  </label>
-                  <input
-                    type="text"
-                    value={input.branch}
-                    onChange={(e) => updateRepositoryInput(input.id, { branch: e.target.value })}
-                    className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
-                    placeholder="main"
-                  />
-                </div>
-                <div className="flex items-end">
-                  <button
-                    type="button"
-                    onClick={() => removeRepositoryInput(input.id)}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-gray-300 transition-colors hover:bg-red-600 hover:text-white"
-                    aria-label={`Remove repository ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+
+                {input.repo_visibility === 'private' && (
+                  <div className="mt-3 max-w-md">
+                    <label className="mb-2 block text-sm font-medium text-gray-300">
+                      Secret token
+                    </label>
+                    <input
+                      type="password"
+                      value={input.secret_token}
+                      onChange={(e) => updateRepositoryInput(input.id, { secret_token: e.target.value })}
+                      className="w-full rounded-lg border border-gray-700 bg-gray-950 px-4 py-2 text-sm outline-none transition focus:border-transparent focus:ring-2 focus:ring-purple-500"
+                      placeholder="Enter secret token"
+                      autoComplete="off"
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1173,12 +1269,7 @@ export default function ExecuteWorkflowPage() {
           </div>
         </section>
 
-        {workflows.length === 0 ? (
-          <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-12 text-center backdrop-blur-sm">
-            <h3 className="mb-2 text-xl font-semibold">No Workflow Runs</h3>
-            <p className="text-gray-400">Start a single workflow, infrastructure scan, or repository batch to begin live tracking.</p>
-          </div>
-        ) : (
+        {workflows.length > 0 && (
           <div className="space-y-4">
             {workflows.map(workflow => (
               <WorkflowCard

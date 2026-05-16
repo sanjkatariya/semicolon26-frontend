@@ -11,6 +11,8 @@ export interface WorkflowRepositoryRequest {
   repo_url: string;
   branch?: string;
   commit_sha?: string;
+  repo_visibility?: 'public' | 'private';
+  secret_token?: string;
 }
 
 export interface WorkflowBatchTriggerRequest {
