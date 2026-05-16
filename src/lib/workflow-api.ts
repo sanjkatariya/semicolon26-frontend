@@ -28,14 +28,23 @@ function buildWorkflowUrl(path: string): string {
   return url.toString();
 }
 
-function redactSensitiveRequest<T>(request: T): T {
-  return JSON.parse(JSON.stringify(request, (key, value) => {
-    if (['access_token', 'ssh_private_key'].includes(key)) {
-      return value ? '[redacted]' : value;
-    }
+function sanitizeRequestForLogging(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeRequestForLogging);
+  }
 
-    return value;
-  })) as T;
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, fieldValue]) => [
+        key,
+        /token|secret|password|private_key/i.test(key) && fieldValue
+          ? '[redacted]'
+          : sanitizeRequestForLogging(fieldValue),
+      ])
+    );
+  }
+
+  return value;
 }
 
 export class WorkflowAPIClient {
@@ -93,7 +102,7 @@ export class WorkflowAPIClient {
     const controller = new AbortController();
     
     console.log('[WorkflowAPI] Starting SSE connection to:', url);
-    console.log('[WorkflowAPI] Request:', redactSensitiveRequest(request));
+    console.log('[WorkflowAPI] Request:', sanitizeRequestForLogging(request));
     
     fetch(url, {
       method: 'POST',
