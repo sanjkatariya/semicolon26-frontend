@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { WorkflowAPIClient } from '@/lib/workflow-api';
 import { WorkflowEvent } from '@/types/workflow-execution';
 import WorkflowCard from '@/components/WorkflowCard';
+import { rememberAgentResult } from '@/lib/workflow-memory';
 
 interface ExecutionStep {
   id: number;
@@ -35,10 +36,11 @@ interface WorkflowInstance {
 
 const initialSteps: ExecutionStep[] = [
   { id: 1, name: 'Repository Scan', agent: 'scanner_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
-  { id: 2, name: 'Vulnerability Analysis', agent: 'analysis_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
-  { id: 3, name: 'Remediation', agent: 'remediation_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
-  { id: 4, name: 'Validation', agent: 'validation_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
-  { id: 5, name: 'Pull Request', agent: 'pr_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
+  { id: 2, name: 'GitHub Issues', agent: 'github_issue_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
+  { id: 3, name: 'Vulnerability Analysis', agent: 'analysis_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
+  { id: 4, name: 'Remediation', agent: 'remediation_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
+  { id: 5, name: 'Validation', agent: 'validation_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
+  { id: 6, name: 'Pull Request', agent: 'pr_agent', status: 'pending', duration: 0, progress: 0, input: {}, output: {} },
 ];
 
 // Feature flag for mock data - controlled via .env.local
@@ -121,6 +123,26 @@ export default function ExecuteWorkflowPage() {
         },
         (event: WorkflowEvent) => {
           console.log(`[${workflowId}] Event received:`, event);
+
+          if (event.event === 'agent_status' && event.agent && (event.status === 'completed' || event.status === 'failed')) {
+            try {
+              const stepName = initialSteps.find(step => step.agent === event.agent)?.name || event.agent;
+              rememberAgentResult({
+                workflowId,
+                agent: event.agent,
+                stepName,
+                status: event.status,
+                timestamp: event.timestamp,
+                repoUrl: workflow.repoUrl,
+                branch: workflow.branch,
+                output: event.status === 'failed'
+                  ? { error: event.error?.message || 'Unknown error' }
+                  : event.data || {},
+              });
+            } catch (memoryError) {
+              console.warn(`[${workflowId}] Failed to save temporary agent result`, memoryError);
+            }
+          }
           
           // Add event to workflow
           setWorkflows(prev => prev.map(wf => {
@@ -169,7 +191,23 @@ export default function ExecuteWorkflowPage() {
                 }
               }
             } else if (event.event === 'workflow_completed') {
-              updatedStatus = event.status === 'failed' ? 'failed' : 'completed';
+              const workflowStatus = event.status === 'failed' ? 'failed' : 'completed';
+              const workflowSummary = 'summary' in event ? event.summary : undefined;
+              updatedStatus = workflowStatus;
+              try {
+                rememberAgentResult({
+                  workflowId,
+                  agent: 'workflow',
+                  stepName: 'Workflow Summary',
+                  status: workflowStatus,
+                  timestamp: event.timestamp,
+                  repoUrl: workflow.repoUrl,
+                  branch: workflow.branch,
+                  output: workflowSummary || event.data || {},
+                });
+              } catch (memoryError) {
+                console.warn(`[${workflowId}] Failed to save temporary workflow summary`, memoryError);
+              }
             }
 
             return {

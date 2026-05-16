@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { rememberAgentResult } from '@/lib/workflow-memory';
 
 interface WorkflowStep {
   step_id: string;
@@ -126,19 +127,15 @@ export default function WorkflowDetailPage() {
       .then(data => {
         const wf = data.workflow_execution;
         setWorkflow(wf);
-        
-        // Pre-fill form with workflow data
-        // Try to extract repo URL from various sources
+
         let repoUrl = '';
         let branchName = 'main';
         
-        // Check trigger_data first
         if (wf.trigger_data) {
           repoUrl = wf.trigger_data.repository || wf.trigger_data.repo_url || wf.trigger_data.repository_url || '';
           branchName = wf.trigger_data.branch || 'main';
         }
         
-        // If not found, check first step's input
         if (!repoUrl && wf.steps && wf.steps.length > 0) {
           const firstStep = wf.steps[0];
           if (firstStep.input) {
@@ -146,17 +143,41 @@ export default function WorkflowDetailPage() {
             branchName = firstStep.input.branch || 'main';
           }
         }
+
+        if (wf.steps && Array.isArray(wf.steps)) {
+          wf.steps.forEach((step: WorkflowStep) => {
+            try {
+              rememberAgentResult({
+                workflowId: wf.id,
+                agent: step.agent_name || step.agent_id || step.step_type,
+                stepName: step.step_name,
+                status: step.status,
+                timestamp: step.completed_at || step.started_at,
+                repoUrl,
+                branch: branchName,
+                output: step.output || {},
+              });
+            } catch (memoryError) {
+              console.warn('[WorkflowDetail] Failed to save temporary step result', memoryError);
+            }
+          });
+        }
         
+        // Pre-fill form with workflow data
+        // Try to extract repo URL from various sources
         setFormData({
           repo_url: repoUrl,
           branch: branchName,
           triggered_by: wf.triggered_by || 'ui'
         });
         
-        // Map workflow steps to execution steps (first 5 steps only for visualization)
+        // Map workflow steps to execution steps for visualization
         if (wf.steps && Array.isArray(wf.steps)) {
           const mappedSteps = steps.map((step, index) => {
-            const wfStep = wf.steps[index];
+            const wfStep = wf.steps.find((candidate: WorkflowStep) => {
+              const agent = candidate.agent_name || candidate.agent_id || candidate.step_type;
+              return agent === step.agent;
+            }) || wf.steps[index];
             if (wfStep) {
               return {
                 ...step,

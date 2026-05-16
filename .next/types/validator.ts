@@ -92,6 +92,24 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../src/app/pull-requests/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/pull-requests">> = Specific
+  const handler = {} as typeof import("../../src/app/pull-requests/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
+// Validate ../../src/app/vulnerabilities/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/vulnerabilities">> = Specific
+  const handler = {} as typeof import("../../src/app/vulnerabilities/page.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../src/app/workflows/[id]/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/workflows/[id]">> = Specific

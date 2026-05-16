@@ -117,6 +117,18 @@
       "namedRegex": "^/dashboard(?:/)?$"
     },
     {
+      "page": "/pull-requests",
+      "regex": "^/pull\\-requests(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/pull\\-requests(?:/)?$"
+    },
+    {
+      "page": "/vulnerabilities",
+      "regex": "^/vulnerabilities(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/vulnerabilities(?:/)?$"
+    },
+    {
       "page": "/workflows",
       "regex": "^/workflows(?:/)?$",
       "routeKeys": {},
