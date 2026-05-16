@@ -1,9 +1,15 @@
 // Types for real-time workflow execution with SSE streaming
+// Matches backend schemas from multi-agent-security/api/schemas/workflow_events.py
 
 export interface WorkflowTriggerRequest {
   repo_url: string;
-  branch: string;
-  triggered_by: string;
+  branch?: string;
+  triggered_by?: string;
+}
+
+export interface AgentError {
+  message: string;
+  details?: string;
 }
 
 export interface AgentStatusEvent {
@@ -12,17 +18,16 @@ export interface AgentStatusEvent {
   status: 'started' | 'completed' | 'failed';
   timestamp: string;
   data?: Record<string, any>;
+  error?: AgentError;
 }
 
 export interface WorkflowCompletedEvent {
   event: 'workflow_completed';
   status: 'completed' | 'failed';
   timestamp: string;
-  summary: {
-    total_vulnerabilities: number;
-    remediated: number;
-    validation: string;
-  };
+  message?: string;
+  summary?: Record<string, any>;
+  error?: AgentError;
 }
 
 export type WorkflowEvent = AgentStatusEvent | WorkflowCompletedEvent;
