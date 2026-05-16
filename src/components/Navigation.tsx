@@ -2,9 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { LogOut } from 'lucide-react';
 
 export default function Navigation() {
   const pathname = usePathname();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  };
 
   const navItems = [
     { href: '/', label: 'Home', icon: '🏠' },
@@ -45,6 +51,14 @@ export default function Navigation() {
                 </Link>
               );
             })}
+            <button
+              onClick={handleLogout}
+              title="Logout"
+              aria-label="Logout"
+              className="ml-2 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700 text-slate-300 transition-all hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-200"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>

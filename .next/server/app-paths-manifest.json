@@ -1,6 +1,4 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/pull-requests/page": "app/pull-requests/page.js",
-  "/workflows/page": "app/workflows/page.js",
-  "/workflows/execute/page": "app/workflows/execute/page.js"
+  "/api/auth/logout/route": "app/api/auth/logout/route.js",
+  "/login/page": "app/login/page.js"
 }
